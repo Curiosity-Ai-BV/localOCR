@@ -75,7 +75,6 @@ This plan outlines targeted improvements to functionality, reliability, and code
 - Add CLI mode for headless batch processing
 - Add async/concurrent processing with rate controls and queueing
 - Pluggable prompts/templates and field schemas
-- Add OCR fallback (e.g., Tesseract) when vision fails to read text
 
 ## Acceptance Criteria for this iteration
 

@@ -95,6 +95,47 @@ pip install -r requirements.txt
    ```
 3. Open your browser to http://localhost:8501 if it doesn’t auto‑open.
 
+## CLI usage (headless)
+
+You can now process files without the UI:
+
+```bash
+python cli.py \
+  --model gemma3:12b \
+  --mode extract \
+  --fields "Invoice number, Date, Total amount" \
+  --templates templates.json \
+  --schema schema.json \
+  --max-concurrency 2 \
+  --rate-limit 0.5 \
+  --out-results results.csv \
+  --out-structured structured.csv \
+  samples/invoice1.pdf samples/receipt.png
+```
+
+- `--mode description|extract`: general description vs extracting specific fields
+- `--fields`: comma‑separated field names (for extract mode)
+- `--max-concurrency`: number of files to process in parallel
+- `--rate-limit`: requests per second (0 = unlimited)
+- Also available: temperature, top‑p, tokens, context, max image size, JPEG quality, and PDF scale
+
+Templates JSON example:
+
+```json
+{
+  "description": "Describe the image focusing on text and layout.",
+  "extraction": "Extract these fields from the image: {fields}. Return strict JSON."
+}
+```
+
+Schema JSON example:
+
+```json
+{
+  "fields": ["Invoice number", "Date", "Company name", "Total amount"]
+}
+```
+
 ## Features
 
 - Multiple file uploads (images and PDFs)
@@ -108,6 +149,7 @@ pip install -r requirements.txt
 - CSV export for both general and structured results
 - Processing time shown under each item and as a batch summary
 - Appearance controls: compact results view and show/hide thumbnails
+- Headless CLI with optional concurrency and rate limiting
 
 ## Design Language
 
@@ -120,6 +162,23 @@ The app follows a minimalist, contemporary design that emphasizes clarity and pr
 - Optional compact mode and ability to hide thumbnails
 
 See design.md for the full design language.
+
+## Project structure
+
+After modularization, the repo is organized as:
+
+- `core/` — image/PDF processing and extraction pipeline
+- `adapters/` — external service adapters (Ollama)
+- `ui/` — Streamlit UI helpers (export panel)
+- `utils/` — shared types and small utilities
+- `cli.py` — Headless batch processor
+- `tests/` — Unit tests for JSON extraction and PDF conversion
+
+Run tests with pytest:
+
+```bash
+pytest -q
+```
 
 ## Advanced model options
 

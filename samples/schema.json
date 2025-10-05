@@ -1,0 +1,9 @@
+{
+  "fields": [
+    "Invoice number",
+    "Date",
+    "Company name",
+    "Total amount"
+  ]
+}
+
