@@ -21,6 +21,27 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Minimal theme layer (accent, spacing, subtle surfaces)
+st.markdown(
+    """
+    <style>
+    :root { --accent: #6C5CE7; }
+    .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1100px; }
+    [data-testid="stSidebar"] { border-right: 1px solid rgba(128,128,128,0.15); }
+    .stButton>button {
+        background: var(--accent); color: #fff; border: 1px solid rgba(0,0,0,0.05);
+        border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 600;
+    }
+    .stButton>button:hover { opacity: .95; }
+    .download-panel {
+        border: 1px dashed rgba(127,127,127,0.25); border-radius: 12px;
+        padding: 0.9rem 1rem; background: rgba(127,127,127,0.06);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Try to import PyMuPDF for PDF support
 try:
     import fitz  # PyMuPDF
@@ -393,30 +414,29 @@ def process_pdf(
 
 
 def create_download_buttons(results: List[JSONDict], structured_results: List[JSONDict], extraction_mode: str) -> None:
-    """Create and display download buttons for results."""
-    st.header("Download Results")
+    st.subheader("Export")
+
+    col1, col2 = st.columns(2)
 
     csv_data = io.StringIO()
     csv_writer = csv.writer(csv_data)
+    csv_writer.writerow(["Filename", "Description"])
+    for result in results:
+        csv_writer.writerow([result["filename"], result.get("description", result.get("extraction", ""))])
 
-    if extraction_mode == "General description" or not structured_results:
-        csv_writer.writerow(["Filename", "Description"])
-        for result in results:
-            csv_writer.writerow([result["filename"], result.get("description", result.get("extraction", ""))])
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"image_analysis_{timestamp}.csv"
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_filename = f"image_analysis_{timestamp}.csv"
-
-        st.success("All files have been processed successfully!")
+    with col1:
         st.download_button(
-            label="📥 Download Results as CSV",
+            label="📥 Download Results (CSV)",
             data=csv_data.getvalue(),
             file_name=csv_filename,
             mime="text/csv",
             use_container_width=True,
         )
 
-    if extraction_mode == "Custom field extraction" and structured_results:
+    if structured_results:
         all_fields = set(["filename"])
         for result in structured_results:
             all_fields.update(result.keys())
@@ -430,22 +450,22 @@ def create_download_buttons(results: List[JSONDict], structured_results: List[JS
             row = [result.get(field, "") for field in field_list]
             structured_writer.writerow(row)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         structured_filename = f"structured_data_{timestamp}.csv"
 
-        st.success("Structured data extracted successfully!")
-        st.download_button(
-            label="📥 Download Structured Data as CSV",
-            data=structured_csv.getvalue(),
-            file_name=structured_filename,
-            mime="text/csv",
-            use_container_width=True,
-        )
+        with col2:
+            st.download_button(
+                label="📥 Download Structured (CSV)",
+                data=structured_csv.getvalue(),
+                file_name=structured_filename,
+                mime="text/csv",
+                use_container_width=True,
+            )
 
 # --- MAIN APP UI ---
 
-# Display the app title
+# Display the app title + caption
 st.title(APP_TITLE)
+st.caption("Local, private, minimalist vision scanning")
 
 # Initialize session state for storing results
 if 'results' not in st.session_state:
@@ -455,7 +475,7 @@ if 'structured_results' not in st.session_state:
 
 # Create a sidebar for the file upload functionality
 with st.sidebar:
-    st.header("Upload Files")
+    st.subheader("Files")
     uploaded_files = st.file_uploader(
         "Choose images or PDFs", 
         accept_multiple_files=True, 
@@ -463,7 +483,7 @@ with st.sidebar:
     )
     
     # Model selection
-    st.header("Model Settings")
+    st.subheader("Model")
     default_models = [
         "gemma3:12b",
         "llama3.2-vision",
@@ -494,6 +514,10 @@ with st.sidebar:
         jpeg_quality = st.slider("JPEG quality", 60, 100, DEFAULT_JPEG_QUALITY, 1)
         pdf_scale = st.slider("PDF render scale", 0.5, 3.0, DEFAULT_PDF_SCALE, 0.1, help="Affects PDF → image resolution before model input")
 
+    with st.expander("Appearance", expanded=False):
+        compact_view = st.checkbox("Compact results view", value=False)
+        show_images = st.checkbox("Show images", value=True)
+
     options = {
         "temperature": float(temperature),
         "top_p": float(top_p),
@@ -509,7 +533,7 @@ with st.sidebar:
         st.write(f"Uploaded {len(uploaded_files)} files")
         
         # Add option for structured data extraction
-        st.header("Data Extraction Options")
+        st.subheader("Extraction")
         extraction_mode = st.radio(
             "Choose extraction mode:",
             ["General description", "Custom field extraction"]
@@ -531,14 +555,14 @@ with st.sidebar:
                 )
         
         # Process button in sidebar
-        process_button = st.button("Process Files")
+        process_button = st.button("Run Scan")
     else:
         st.info("Please upload images or PDF files to analyze")
         process_button = False
 
 # Main app logic
 if uploaded_files and process_button:
-    st.header("Processing Results")
+    st.subheader("Results")
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -627,14 +651,15 @@ if uploaded_files and process_button:
                         st.session_state.structured_results.append(structured_data)
                     
                     # Display the processed image and its results
-                    st.subheader(page_filename)
+                    st.markdown(f"#### {page_filename}")
                     col1, col2 = st.columns([1, 2])
                     with col1:
-                        st.image(image, width=250)
+                        if show_images:
+                            st.image(image, width=(180 if compact_view else 250))
                         if page_count > 1 and not process_separately:
                             st.info(f"PDF has {page_count} pages. Showing first page only.")
                     with col2:
-                        st.write(content)
+                        st.markdown(content)
                         meta_bits = []
                         if isinstance(elapsed_sec, (int, float)):
                             meta_bits.append(f"⏱ {float(elapsed_sec):.2f} s")
@@ -645,8 +670,8 @@ if uploaded_files and process_button:
                         if meta_bits:
                             st.caption(" • ".join(meta_bits))
                         if structured_data and len(structured_data) > 1:
-                            st.success("Successfully extracted structured data")
-                            st.json(structured_data)
+                            with st.expander("Structured JSON"):
+                                st.json(structured_data)
                     
                     st.divider()
                     
@@ -682,12 +707,13 @@ if uploaded_files and process_button:
                     st.session_state.structured_results.append(structured_data)
                 
                 # Display the processed image and its results
-                st.subheader(f"Image: {uploaded_file.name}")
+                st.markdown(f"#### Image: {uploaded_file.name}")
                 col1, col2 = st.columns([1, 2])
                 with col1:
-                    st.image(image, width=250)
+                    if show_images:
+                        st.image(image, width=(180 if compact_view else 250))
                 with col2:
-                    st.write(content)
+                    st.markdown(content)
                     meta_bits = []
                     if isinstance(result.get('duration_sec'), (int, float)):
                         meta_bits.append(f"⏱ {float(result['duration_sec']):.2f} s")
@@ -698,8 +724,8 @@ if uploaded_files and process_button:
                     if meta_bits:
                         st.caption(" • ".join(meta_bits))
                     if structured_data and len(structured_data) > 1:
-                        st.success("Successfully extracted structured data")
-                        st.json(structured_data)
+                        with st.expander("Structured JSON"):
+                            st.json(structured_data)
                 
                 st.divider()
                 
@@ -718,14 +744,14 @@ if uploaded_files and process_button:
     # Create download buttons
     if st.session_state.results:
         create_download_buttons(
-            st.session_state.results, 
-            st.session_state.structured_results, 
-            extraction_mode
+            st.session_state.results,
+            st.session_state.structured_results,
+            extraction_mode,
         )
 
 # Display instructions when no files are processed yet
 if not uploaded_files:
-    st.info("👈 Upload files using the sidebar to get started")
+    st.info("👈 Add files on the left to get started")
     st.write("""
     ## How to use this app:
     1. Upload one or more images or PDF files using the sidebar on the left
@@ -733,7 +759,7 @@ if not uploaded_files:
     3. Choose between general description or custom field extraction
     4. If using custom extraction, specify the fields you want to extract
     5. For PDFs, choose whether to process each page separately or the entire document
-    6. Click the 'Process Files' button to analyze them
+    6. Click 'Run Scan' to analyze them
     7. View the results for each image or PDF page
     8. Download results as a CSV file
     

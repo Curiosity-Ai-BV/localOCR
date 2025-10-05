@@ -14,6 +14,7 @@ A streamlined Streamlit app that uses local AI vision models (via Ollama) to ana
 - Model availability check with actionable guidance when models are missing
 - Clearer errors and progress feedback
 - Processing time display per item and batch (see how settings affect latency)
+- Minimalist, modern UI refresh with compact mode and a cleaner export panel
 
 Additionally, each item now shows the actual model input size (WxH) and the encoded JPEG size in KB, so you can confirm preprocessing is applied before inference.
 
@@ -106,6 +107,19 @@ pip install -r requirements.txt
 - PDF processing per page or first page only
 - CSV export for both general and structured results
 - Processing time shown under each item and as a batch summary
+- Appearance controls: compact results view and show/hide thumbnails
+
+## Design Language
+
+The app follows a minimalist, contemporary design that emphasizes clarity and progressive disclosure. Primary actions use a single accent color; advanced settings live in collapsible panels; results are easy to scan with soft dividers and compact metadata.
+
+- Two‑pane layout: inputs in the sidebar, results in the main area
+- Accent color for primary actions only; otherwise neutral surfaces
+- Card‑like result grouping with clear captions for time, size, dimensions
+- JSON details shown inside a collapsible expander to reduce noise
+- Optional compact mode and ability to hide thumbnails
+
+See design.md for the full design language.
 
 ## Advanced model options
 
@@ -117,6 +131,11 @@ Open the “Advanced Model Options” expander in the sidebar to configure:
 - Context length (`num_ctx`): increase when prompts + images are large
 - Max image dimension and JPEG quality: balance speed and fidelity
 - PDF render scale: changes the PDF page rasterization resolution before resizing
+
+### Appearance
+
+- Compact results view: condenses spacing and uses smaller thumbnails
+- Show images: toggle thumbnails on/off in results
 
 ## Performance tips
 
