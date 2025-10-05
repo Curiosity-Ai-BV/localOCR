@@ -1,20 +1,23 @@
-import streamlit as st
-import ollama
-import io
+from __future__ import annotations
+
 import base64
-import pandas as pd
-from PIL import Image
-from datetime import datetime
 import csv
+import io
 import json
-import os
+import re
+from datetime import datetime
+from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
+
+import ollama
+import streamlit as st
+from PIL import Image
 
 # Set page config (must be first Streamlit command)
 st.set_page_config(
     page_title="Curiosity AI Scans",
     page_icon="🔍",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # Try to import PyMuPDF for PDF support
@@ -25,178 +28,393 @@ except ImportError:
     PDF_SUPPORT = False
     st.warning("PDF support requires PyMuPDF. Install it with: pip install pymupdf")
 
-# --- HELPER FUNCTIONS ---
+###############################################################################
+# Constants and Types
+###############################################################################
 
-def resize_image(image, max_size=1920):
-    """Resize an image while maintaining aspect ratio"""
+APP_TITLE = "Curiosity AI Scans"
+DEFAULT_MAX_IMAGE_SIZE = 1920
+DEFAULT_JPEG_QUALITY = 90
+
+JSONDict = Dict[str, Any]
+
+
+###############################################################################
+# Helper functions
+###############################################################################
+
+def resize_image(image: Image.Image, max_size: int = DEFAULT_MAX_IMAGE_SIZE) -> Image.Image:
+    """Resize an image while maintaining aspect ratio.
+
+    Args:
+        image: PIL Image.
+        max_size: Maximum width or height in pixels.
+
+    Returns:
+        Resized PIL Image (or the original if no resize needed).
+    """
     width, height = image.size
-    
-    if width > max_size or height > max_size:
-        if width > height:
-            new_width = max_size
-            new_height = int(height * (max_size / width))
-        else:
-            new_height = max_size
-            new_width = int(width * (max_size / height))
-        
-        return image.resize((new_width, new_height), Image.LANCZOS)
-    
-    return image
+    if width <= max_size and height <= max_size:
+        return image
 
-def image_to_base64(image):
-    """Convert PIL Image to base64 encoded string"""
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='JPEG')
-    return base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
-
-def query_ollama(prompt, image_base64, model):
-    """Query Ollama with an image and prompt"""
-    response = ollama.chat(
-        model=model,
-        messages=[{
-            'role': 'user',
-            'content': prompt,
-            'images': [image_base64]
-        }]
-    )
-    return response['message']['content']
-
-def extract_structured_data(content, fields):
-    """Extract structured data from text content"""
-    structured_data = {}
-    
-    try:
-        # Try to find JSON content between ```json and ``` markers
-        if "```json" in content and "```" in content.split("```json")[1]:
-            json_str = content.split("```json")[1].split("```")[0].strip()
-            structured_data.update(json.loads(json_str))
-        else:
-            # Try to find any JSON object in the text
-            json_str = content
-            for field in fields:
-                field_clean = field.strip()
-                if f'"{field_clean}"' in json_str or f"'{field_clean}'" in json_str:
-                    try:
-                        structured_data.update(json.loads(json_str))
-                        break
-                    except:
-                        pass
-    except:
-        pass
-            
-    return structured_data
-
-def process_image(image, filename, fields=None, model=None):
-    """Process an image with optional field extraction"""
-    # Resize image and convert to base64
-    img_base64 = image_to_base64(resize_image(image))
-    
-    if fields is None:
-        # General description mode
-        prompt = 'Describe what you see in this image in detail.'
-        content = query_ollama(prompt, img_base64, model)
-        return {'filename': filename, 'description': content}, content, None
+    if width > height:
+        new_width = max_size
+        new_height = max(1, int(height * (max_size / max(width, 1))))
     else:
-        # Custom field extraction mode
-        fields_str = ", ".join(fields)
-        prompt = f"Extract the following information from this image: {fields_str}. Return the results in JSON format with these exact field names."
-        content = query_ollama(prompt, img_base64, model)
-        
-        # Extract structured data
-        structured_data = {'filename': filename}
-        structured_data.update(extract_structured_data(content, fields))
-            
-        return {'filename': filename, 'extraction': content}, content, structured_data
+        new_height = max_size
+        new_width = max(1, int(width * (max_size / max(height, 1))))
 
-def process_pdf(file_bytes, filename, fields=None, process_pages_separately=True, model=None):
-    """Process a PDF file using PyMuPDF"""
+    return image.resize((new_width, new_height), Image.LANCZOS)
+
+
+def image_to_base64(image: Image.Image, quality: int = DEFAULT_JPEG_QUALITY) -> str:
+    """Convert PIL Image to base64 encoded JPEG string.
+
+    Ensures RGB mode and applies JPEG quality.
+    """
+    if image.mode not in ("RGB", "L"):  # Convert RGBA/P etc.
+        image = image.convert("RGB")
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format="JPEG", quality=int(quality), optimize=True)
+    return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+
+
+def ensure_model_available(model: str) -> Tuple[bool, Optional[str]]:
+    """Best‑effort check for model availability in Ollama.
+
+    Uses `ollama.show(model)` first (most accurate), then falls back to
+    `ollama.list()` with tolerant matching (case‑insensitive and tag‑agnostic).
+    Never raises; returns (available, warning_message_if_any).
+    """
     try:
-        # Open PDF document from memory
+        # Most reliable: resolves aliases and tags if present
+        _ = ollama.show(model)
+        return True, None
+    except Exception:
+        pass
+
+    try:
+        listing = ollama.list()
+        raw_models = listing.get("models", [])
+
+        def norm(s: str) -> str:
+            return s.strip().lower()
+
+        def base(s: str) -> str:
+            # split on last ':' only (repo paths may contain ':')
+            parts = s.rsplit(":", 1)
+            return parts[0] if len(parts) == 2 else s
+
+        target = norm(model)
+        target_base = base(target)
+
+        candidates: List[str] = []
+        for m in raw_models:
+            for key in ("name", "model"):
+                val = m.get(key)
+                if isinstance(val, str):
+                    candidates.append(norm(val))
+
+        # Exact or base/tag‑agnostic matches
+        for c in candidates:
+            if c == target:
+                return True, None
+            if base(c) == target_base:
+                return True, None
+            if c.startswith(target) or target.startswith(c):
+                return True, None
+
+        # Not found in list, but we won't hard‑block; just warn
+        return False, "Model not detected from Ollama list; proceeding anyway."
+    except Exception as e:
+        # If list fails (daemon down etc.), be permissive
+        return True, f"Could not verify model availability: {e}"
+
+
+def query_ollama(
+    prompt: str,
+    image_base64: str,
+    model: str,
+    *,
+    options: Optional[JSONDict] = None,
+    system_prompt: Optional[str] = None,
+) -> str:
+    """Query Ollama with an image and prompt, returning model content.
+
+    Raises RuntimeError on failure.
+    """
+    messages: List[JSONDict] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({
+        "role": "user",
+        "content": prompt,
+        "images": [image_base64],
+    })
+
+    try:
+        response = ollama.chat(model=model, messages=messages, options=options or {})
+        content = response.get("message", {}).get("content", "")
+        if not isinstance(content, str):
+            raise RuntimeError("Unexpected response content type from model")
+        return content
+    except Exception as e:
+        raise RuntimeError(f"Ollama chat failed: {e}")
+
+
+def get_available_models(defaults: Optional[List[str]] = None) -> List[str]:
+    """Return a list of available model names, preferring locally installed.
+
+    If listing fails, fall back to provided defaults. Duplicates are removed,
+    preserving the order of installed first, then defaults.
+    """
+    defaults = defaults or []
+    ordered: List[str] = []
+    seen: set[str] = set()
+    # Try to list installed models
+    try:
+        listing = ollama.list()
+        for m in listing.get("models", []):
+            name = m.get("name") or m.get("model")
+            if isinstance(name, str) and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+    except Exception:
+        pass
+    # Add defaults after
+    for d in defaults:
+        if d not in seen:
+            ordered.append(d)
+            seen.add(d)
+    return ordered or defaults
+
+
+def _extract_json_from_fenced_blocks(text: str) -> List[JSONDict]:
+    """Extract JSON objects from ```json fenced code blocks."""
+    results: List[JSONDict] = []
+    for match in re.finditer(r"```json\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE):
+        candidate = match.group(1)
+        try:
+            obj = json.loads(candidate)
+            if isinstance(obj, dict):
+                results.append(obj)
+        except Exception:
+            continue
+    return results
+
+
+def _extract_json_by_brace_scanning(text: str) -> List[JSONDict]:
+    """Extract JSON objects by scanning for balanced braces.
+
+    Note: This is a heuristic and does not fully parse JSON strings with nested
+    braces inside quoted strings. It works well for typical LLM outputs.
+    """
+    results: List[JSONDict] = []
+    depth = 0
+    start = -1
+    for i, ch in enumerate(text):
+        if ch == "{" and depth == 0:
+            start = i
+            depth = 1
+        elif ch == "{" and depth > 0:
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                snippet = text[start : i + 1]
+                try:
+                    obj = json.loads(snippet)
+                    if isinstance(obj, dict):
+                        results.append(obj)
+                except Exception:
+                    pass
+                start = -1
+    return results
+
+
+def _extract_field_heuristics(text: str, fields: Iterable[str]) -> JSONDict:
+    """Heuristic key/value extraction for requested fields from plain text."""
+    data: JSONDict = {}
+    for field in fields:
+        f = field.strip()
+        if not f:
+            continue
+        # Simple patterns: Field: "value" | Field: value | Field = value
+        pattern = rf"(?i)\b{re.escape(f)}\b\s*[:=\-]\s*(\".*?\"|'.*?'|[\w\-./$%,]+)"
+        m = re.search(pattern, text)
+        if m:
+            val = m.group(1)
+            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                val = val[1:-1]
+            data[f] = val
+    return data
+
+
+def extract_structured_data(content: str, fields: Optional[List[str]]) -> JSONDict:
+    """Extract structured data from model content.
+
+    Tries fenced blocks, then brace scanning, then heuristics if fields given.
+    """
+    fields = fields or []
+    # 1) Fenced blocks
+    for obj in _extract_json_from_fenced_blocks(content):
+        return obj
+    # 2) Brace scan
+    objs = _extract_json_by_brace_scanning(content)
+    if objs:
+        # Prefer an object that contains any field requested
+        if fields:
+            for o in objs:
+                if any(f in o for f in fields):
+                    return o
+        return objs[0]
+    # 3) Heuristics
+    if fields:
+        return _extract_field_heuristics(content, fields)
+    return {}
+
+
+def process_image(
+    image: Image.Image,
+    filename: str,
+    fields: Optional[List[str]] = None,
+    *,
+    model: str,
+    system_prompt: Optional[str],
+    options: Optional[JSONDict],
+    max_image_size: int,
+    jpeg_quality: int,
+) -> Tuple[JSONDict, str, Optional[JSONDict]]:
+    """Process a single image with optional field extraction."""
+    prepared = resize_image(image, max_image_size)
+    img_base64 = image_to_base64(prepared, jpeg_quality)
+
+    if not fields:
+        prompt = "Describe what you see in this image in detail."
+        content = query_ollama(prompt, img_base64, model, options=options, system_prompt=system_prompt)
+        return {"filename": filename, "description": content}, content, None
+    else:
+        fields_str = ", ".join(fields)
+        prompt = (
+            f"Extract the following information from this image: {fields_str}. "
+            f"Return the results in JSON format with these exact field names."
+        )
+        content = query_ollama(prompt, img_base64, model, options=options, system_prompt=system_prompt)
+        structured_data: JSONDict = {"filename": filename}
+        parsed = extract_structured_data(content, fields)
+        structured_data.update(parsed)
+        return {"filename": filename, "extraction": content}, content, structured_data
+
+
+def process_pdf(
+    file_bytes: bytes,
+    filename: str,
+    fields: Optional[List[str]] = None,
+    process_pages_separately: bool = True,
+    *,
+    model: str,
+    system_prompt: Optional[str],
+    options: Optional[JSONDict],
+    max_image_size: int,
+    jpeg_quality: int,
+) -> Generator[Tuple[Optional[int], Optional[int], Optional[Image.Image], str, str, Optional[JSONDict]], None, None]:
+    """Process a PDF file using PyMuPDF, yielding page-level results."""
+    try:
         pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
         page_count = len(pdf_document)
-        
+
         if process_pages_separately:
-            # Process each page as a separate image
             for page_num in range(page_count):
                 page = pdf_document[page_num]
                 pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                page_filename = f"{filename} (Page {page_num+1})"
-                
-                result, content, structured_data = process_image(img, page_filename, fields, model)
+                page_filename = f"{filename} (Page {page_num + 1})"
+
+                _, content, structured_data = process_image(
+                    img,
+                    page_filename,
+                    fields,
+                    model=model,
+                    system_prompt=system_prompt,
+                    options=options,
+                    max_image_size=max_image_size,
+                    jpeg_quality=jpeg_quality,
+                )
                 yield page_num, page_count, img, page_filename, content, structured_data
         else:
-            # Process only the first page
             page = pdf_document[0]
             pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            result, content, structured_data = process_image(img, filename, fields, model)
+
+            _, content, structured_data = process_image(
+                img,
+                filename,
+                fields,
+                model=model,
+                system_prompt=system_prompt,
+                options=options,
+                max_image_size=max_image_size,
+                jpeg_quality=jpeg_quality,
+            )
             yield 0, page_count, img, filename, content, structured_data
-            
     except Exception as e:
         yield None, None, None, filename, f"Error processing PDF: {str(e)}", None
 
-def create_download_buttons(results, structured_results, extraction_mode):
-    """Create and display download buttons for results"""
+
+def create_download_buttons(results: List[JSONDict], structured_results: List[JSONDict], extraction_mode: str) -> None:
+    """Create and display download buttons for results."""
     st.header("Download Results")
-    
-    # Create general CSV data
+
     csv_data = io.StringIO()
     csv_writer = csv.writer(csv_data)
-    
+
     if extraction_mode == "General description" or not structured_results:
-        # Original CSV format with descriptions
-        csv_writer.writerow(['Filename', 'Description'])
+        csv_writer.writerow(["Filename", "Description"])
         for result in results:
-            csv_writer.writerow([result['filename'], result.get('description', result.get('extraction', ''))])
-        
-        # Generate a filename with current date/time
+            csv_writer.writerow([result["filename"], result.get("description", result.get("extraction", ""))])
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         csv_filename = f"image_analysis_{timestamp}.csv"
-        
+
         st.success("All files have been processed successfully!")
         st.download_button(
             label="📥 Download Results as CSV",
             data=csv_data.getvalue(),
             file_name=csv_filename,
             mime="text/csv",
-            use_container_width=True
+            use_container_width=True,
         )
-    
-    # Create structured CSV if available
+
     if extraction_mode == "Custom field extraction" and structured_results:
-        # Get all possible fields from the results
-        all_fields = set(['filename'])
+        all_fields = set(["filename"])
         for result in structured_results:
             all_fields.update(result.keys())
-        
-        # Create structured CSV with sorted fields
+
         field_list = sorted(list(all_fields))
         structured_csv = io.StringIO()
         structured_writer = csv.writer(structured_csv)
         structured_writer.writerow(field_list)
-        
+
         for result in structured_results:
-            row = [result.get(field, '') for field in field_list]
+            row = [result.get(field, "") for field in field_list]
             structured_writer.writerow(row)
-        
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         structured_filename = f"structured_data_{timestamp}.csv"
-        
+
         st.success("Structured data extracted successfully!")
         st.download_button(
             label="📥 Download Structured Data as CSV",
             data=structured_csv.getvalue(),
             file_name=structured_filename,
             mime="text/csv",
-            use_container_width=True
+            use_container_width=True,
         )
 
 # --- MAIN APP UI ---
 
 # Display the app title
-st.title("Curiosity AI Scans")
+st.title(APP_TITLE)
 
 # Initialize session state for storing results
 if 'results' not in st.session_state:
@@ -215,11 +433,41 @@ with st.sidebar:
     
     # Model selection
     st.header("Model Settings")
+    default_models = [
+        "gemma3:12b",
+        "llama3.2-vision",
+        "granite3.2-vision",
+        "MHKetbi/Unsloth_gemma3-12b-it:latest",
+    ]
+    model_options = get_available_models(default_models)
     selected_model = st.selectbox(
         "Choose vision model:",
-        ["gemma3:12b", "llama3.2-vision", "granite3.2-vision", "MHKetbi/Unsloth_gemma3-12b-it:latest"],
-        help="Select which AI model to use for image analysis"
+        model_options,
+        help="Select which AI model to use for image analysis",
     )
+
+    # Advanced model options
+    with st.expander("Advanced Model Options", expanded=False):
+        system_prompt = st.text_area(
+            "System prompt (optional)",
+            value="",
+            help="Steer the model's behavior with a system instruction.",
+        )
+        temperature = st.slider("Temperature", 0.0, 1.0, 0.2, 0.05)
+        top_p = st.slider("Top-p", 0.0, 1.0, 0.9, 0.05)
+        num_predict = st.slider("Max tokens to generate", 64, 4096, 512, 64)
+        num_ctx = st.slider("Context length (num_ctx)", 1024, 8192, 4096, 256)
+
+        st.caption("Image settings")
+        max_image_size = st.slider("Max image dimension (px)", 512, 4096, DEFAULT_MAX_IMAGE_SIZE, 64)
+        jpeg_quality = st.slider("JPEG quality", 70, 100, DEFAULT_JPEG_QUALITY, 1)
+
+    options = {
+        "temperature": float(temperature),
+        "top_p": float(top_p),
+        "num_predict": int(num_predict),
+        "num_ctx": int(num_ctx),
+    }
     
     extraction_mode = "General description"
     pdf_process_mode = "Process each page separately"
@@ -266,6 +514,16 @@ if uploaded_files and process_button:
     # Clear previous results when starting a new batch
     st.session_state.results = []
     st.session_state.structured_results = []
+
+    # Verify model availability
+    available, availability_note = ensure_model_available(selected_model)
+    if availability_note:
+        st.warning(availability_note)
+    if not available:
+        st.info(
+            f"Could not confirm model '{selected_model}' locally. Attempting anyway. "
+            f"If you see failures, run: `ollama pull {selected_model}`."
+        )
     
     # Count total items to process (including PDF pages)
     total_items = 0
@@ -304,7 +562,17 @@ if uploaded_files and process_button:
             try:
                 process_separately = pdf_process_mode == "Process each page separately"
                 
-                for page_info in process_pdf(file_bytes, uploaded_file.name, fields, process_separately, selected_model):
+                for page_info in process_pdf(
+                    file_bytes,
+                    uploaded_file.name,
+                    fields,
+                    process_separately,
+                    model=selected_model,
+                    system_prompt=system_prompt or None,
+                    options=options,
+                    max_image_size=max_image_size,
+                    jpeg_quality=jpeg_quality,
+                ):
                     page_num, page_count, image, page_filename, content, structured_data = page_info
                     
                     if page_num is None:  # Error case
@@ -349,8 +617,16 @@ if uploaded_files and process_button:
             
             try:
                 image = Image.open(uploaded_file)
-                
-                result, content, structured_data = process_image(image, uploaded_file.name, fields, selected_model)
+                result, content, structured_data = process_image(
+                    image,
+                    uploaded_file.name,
+                    fields,
+                    model=selected_model,
+                    system_prompt=system_prompt or None,
+                    options=options,
+                    max_image_size=max_image_size,
+                    jpeg_quality=jpeg_quality,
+                )
                 st.session_state.results.append(result)
                 
                 if structured_data and len(structured_data) > 1:
