@@ -10,8 +10,12 @@ A streamlined Streamlit app that uses local AI vision models (via Ollama) to ana
 - Advanced model options in the sidebar (temperature, top‑p, max tokens, context length)
 - Optional system prompt to steer model behavior
 - Adjustable image resize and JPEG quality for better performance and output
+- PDF render scale control for PDFs (affects page → image resolution)
 - Model availability check with actionable guidance when models are missing
 - Clearer errors and progress feedback
+- Processing time display per item and batch (see how settings affect latency)
+
+Additionally, each item now shows the actual model input size (WxH) and the encoded JPEG size in KB, so you can confirm preprocessing is applied before inference.
 
 ## What this application does
 
@@ -62,8 +66,18 @@ Pull one or more — the app works with whichever you have installed.
 Use Python 3.9–3.12 for best compatibility.
 
 ```bash
+# Create a virtual environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Activate it
+# macOS/Linux
+source venv/bin/activate
+# Windows (PowerShell)
+venv\Scripts\Activate.ps1
+# Windows (CMD)
+venv\Scripts\activate.bat
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
@@ -73,6 +87,7 @@ pip install -r requirements.txt
    ```bash
    ollama serve
    ```
+   - Windows: Ollama typically runs as a service after installation. If you get connection errors, run the command above in a new terminal.
 2. Launch the app
    ```bash
    streamlit run app.py
@@ -87,8 +102,10 @@ pip install -r requirements.txt
   - Temperature, top‑p, max tokens (`num_predict`), context length (`num_ctx`)
   - System prompt (optional)
 - Adjustable image resize and JPEG quality
+- PDF render scale (pre‑rendering DPI via scale multiplier)
 - PDF processing per page or first page only
 - CSV export for both general and structured results
+- Processing time shown under each item and as a batch summary
 
 ## Advanced model options
 
@@ -99,15 +116,23 @@ Open the “Advanced Model Options” expander in the sidebar to configure:
 - Max tokens (`num_predict`): cap the number of generated tokens
 - Context length (`num_ctx`): increase when prompts + images are large
 - Max image dimension and JPEG quality: balance speed and fidelity
+- PDF render scale: changes the PDF page rasterization resolution before resizing
+
+## Performance tips
+
+- The largest impact on latency typically comes from generation length. Reduce “Max tokens (`num_predict`)” for faster responses.
+- For PDFs, lowering the PDF render scale can significantly reduce pixels processed.
+- Lower “Max image dimension (px)” reduces pixels; quality mostly affects encoded file size and decode cost (smaller effect than pixels or tokens).
+- If running on CPU, expect slower times. GPU acceleration (where available) and quantized models often help.
 
 ## Troubleshooting
 
 - Ollama not running: start with `ollama serve`
-- Model not found: pull it with `ollama pull <model_name>`
+- Model not found: pull it with `ollama pull <model_name>`. The app tries to detect installed models and will proceed even if it can’t confirm; failures will include a concrete error message.
 - PDF support missing: install PyMuPDF — `pip install pymupdf`
 - Python compatibility: prefer Python 3.9–3.12
 - Long or complex prompts: if hitting context limits, increase `num_ctx`
 
 ---
 
-Made with ❤️ by Adrian with Claude — [ad1x.com](https://ad1x.com)
+Made with ❤️ by Adrian with GPT-5 — [ad1x.com](https://ad1x.com)

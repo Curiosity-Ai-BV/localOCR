@@ -6,6 +6,7 @@ import io
 import json
 import re
 from datetime import datetime
+import time
 from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
 
 import ollama
@@ -35,6 +36,7 @@ except ImportError:
 APP_TITLE = "Curiosity AI Scans"
 DEFAULT_MAX_IMAGE_SIZE = 1920
 DEFAULT_JPEG_QUALITY = 90
+DEFAULT_PDF_SCALE = 1.5
 
 JSONDict = Dict[str, Any]
 
@@ -67,16 +69,17 @@ def resize_image(image: Image.Image, max_size: int = DEFAULT_MAX_IMAGE_SIZE) -> 
     return image.resize((new_width, new_height), Image.LANCZOS)
 
 
-def image_to_base64(image: Image.Image, quality: int = DEFAULT_JPEG_QUALITY) -> str:
+def image_to_base64(image: Image.Image, quality: int = DEFAULT_JPEG_QUALITY) -> Tuple[str, int]:
     """Convert PIL Image to base64 encoded JPEG string.
 
-    Ensures RGB mode and applies JPEG quality.
+    Returns (base64_string, encoded_byte_size). Ensures RGB mode and applies JPEG quality.
     """
-    if image.mode not in ("RGB", "L"):  # Convert RGBA/P etc.
+    if image.mode not in ("RGB", "L"):
         image = image.convert("RGB")
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format="JPEG", quality=int(quality), optimize=True)
-    return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+    raw = img_byte_arr.getvalue()
+    return base64.b64encode(raw).decode("utf-8"), len(raw)
 
 
 def ensure_model_available(model: str) -> Tuple[bool, Optional[str]]:
@@ -285,14 +288,27 @@ def process_image(
     max_image_size: int,
     jpeg_quality: int,
 ) -> Tuple[JSONDict, str, Optional[JSONDict]]:
-    """Process a single image with optional field extraction."""
+    """Process a single image with optional field extraction.
+
+    Returns a tuple of (result_dict, raw_content, structured_dict_or_none).
+    The result dict includes a 'duration_sec' key for UI timing display.
+    """
+    t0 = time.perf_counter()
     prepared = resize_image(image, max_image_size)
-    img_base64 = image_to_base64(prepared, jpeg_quality)
+    img_base64, encoded_size = image_to_base64(prepared, jpeg_quality)
 
     if not fields:
         prompt = "Describe what you see in this image in detail."
         content = query_ollama(prompt, img_base64, model, options=options, system_prompt=system_prompt)
-        return {"filename": filename, "description": content}, content, None
+        elapsed = time.perf_counter() - t0
+        return {
+            "filename": filename,
+            "description": content,
+            "duration_sec": round(elapsed, 3),
+            "input_width": prepared.size[0],
+            "input_height": prepared.size[1],
+            "encoded_bytes": int(encoded_size),
+        }, content, None
     else:
         fields_str = ", ".join(fields)
         prompt = (
@@ -303,7 +319,15 @@ def process_image(
         structured_data: JSONDict = {"filename": filename}
         parsed = extract_structured_data(content, fields)
         structured_data.update(parsed)
-        return {"filename": filename, "extraction": content}, content, structured_data
+        elapsed = time.perf_counter() - t0
+        return {
+            "filename": filename,
+            "extraction": content,
+            "duration_sec": round(elapsed, 3),
+            "input_width": prepared.size[0],
+            "input_height": prepared.size[1],
+            "encoded_bytes": int(encoded_size),
+        }, content, structured_data
 
 
 def process_pdf(
@@ -317,7 +341,8 @@ def process_pdf(
     options: Optional[JSONDict],
     max_image_size: int,
     jpeg_quality: int,
-) -> Generator[Tuple[Optional[int], Optional[int], Optional[Image.Image], str, str, Optional[JSONDict]], None, None]:
+    pdf_scale: float,
+) -> Generator[Tuple[Optional[int], Optional[int], Optional[Image.Image], str, str, Optional[JSONDict], Optional[float], Optional[Tuple[int,int]], Optional[int]], None, None]:
     """Process a PDF file using PyMuPDF, yielding page-level results."""
     try:
         pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
@@ -326,11 +351,11 @@ def process_pdf(
         if process_pages_separately:
             for page_num in range(page_count):
                 page = pdf_document[page_num]
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+                pix = page.get_pixmap(matrix=fitz.Matrix(pdf_scale, pdf_scale))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 page_filename = f"{filename} (Page {page_num + 1})"
 
-                _, content, structured_data = process_image(
+                result, content, structured_data = process_image(
                     img,
                     page_filename,
                     fields,
@@ -340,13 +365,16 @@ def process_pdf(
                     max_image_size=max_image_size,
                     jpeg_quality=jpeg_quality,
                 )
-                yield page_num, page_count, img, page_filename, content, structured_data
+                elapsed = result.get("duration_sec") if isinstance(result, dict) else None
+                dims = (result.get("input_width"), result.get("input_height")) if isinstance(result, dict) else None
+                size_bytes = result.get("encoded_bytes") if isinstance(result, dict) else None
+                yield page_num, page_count, img, page_filename, content, structured_data, elapsed, dims, size_bytes
         else:
             page = pdf_document[0]
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+            pix = page.get_pixmap(matrix=fitz.Matrix(pdf_scale, pdf_scale))
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-            _, content, structured_data = process_image(
+            result, content, structured_data = process_image(
                 img,
                 filename,
                 fields,
@@ -356,9 +384,12 @@ def process_pdf(
                 max_image_size=max_image_size,
                 jpeg_quality=jpeg_quality,
             )
-            yield 0, page_count, img, filename, content, structured_data
+            elapsed = result.get("duration_sec") if isinstance(result, dict) else None
+            dims = (result.get("input_width"), result.get("input_height")) if isinstance(result, dict) else None
+            size_bytes = result.get("encoded_bytes") if isinstance(result, dict) else None
+            yield 0, page_count, img, filename, content, structured_data, elapsed, dims, size_bytes
     except Exception as e:
-        yield None, None, None, filename, f"Error processing PDF: {str(e)}", None
+        yield None, None, None, filename, f"Error processing PDF: {str(e)}", None, None, None, None
 
 
 def create_download_buttons(results: List[JSONDict], structured_results: List[JSONDict], extraction_mode: str) -> None:
@@ -459,8 +490,9 @@ with st.sidebar:
         num_ctx = st.slider("Context length (num_ctx)", 1024, 8192, 4096, 256)
 
         st.caption("Image settings")
-        max_image_size = st.slider("Max image dimension (px)", 512, 4096, DEFAULT_MAX_IMAGE_SIZE, 64)
-        jpeg_quality = st.slider("JPEG quality", 70, 100, DEFAULT_JPEG_QUALITY, 1)
+        max_image_size = st.slider("Max image dimension (px)", 256, 4096, DEFAULT_MAX_IMAGE_SIZE, 64)
+        jpeg_quality = st.slider("JPEG quality", 60, 100, DEFAULT_JPEG_QUALITY, 1)
+        pdf_scale = st.slider("PDF render scale", 0.5, 3.0, DEFAULT_PDF_SCALE, 0.1, help="Affects PDF → image resolution before model input")
 
     options = {
         "temperature": float(temperature),
@@ -545,6 +577,8 @@ if uploaded_files and process_button:
             total_items += 1
     
     processed_count = 0
+    durations: List[float] = []
+    batch_start = time.perf_counter()
     
     # Process each file
     for uploaded_file in uploaded_files:
@@ -572,8 +606,9 @@ if uploaded_files and process_button:
                     options=options,
                     max_image_size=max_image_size,
                     jpeg_quality=jpeg_quality,
+                    pdf_scale=pdf_scale,
                 ):
-                    page_num, page_count, image, page_filename, content, structured_data = page_info
+                    page_num, page_count, image, page_filename, content, structured_data, elapsed_sec, dims, size_bytes = page_info
                     
                     if page_num is None:  # Error case
                         st.error(content)
@@ -583,6 +618,9 @@ if uploaded_files and process_button:
                     
                     # Add to session state
                     result = {'filename': page_filename, 'description': content}
+                    if isinstance(elapsed_sec, (int, float)):
+                        result['duration_sec'] = round(float(elapsed_sec), 3)
+                        durations.append(float(elapsed_sec))
                     st.session_state.results.append(result)
                     
                     if structured_data and len(structured_data) > 1:
@@ -597,6 +635,15 @@ if uploaded_files and process_button:
                             st.info(f"PDF has {page_count} pages. Showing first page only.")
                     with col2:
                         st.write(content)
+                        meta_bits = []
+                        if isinstance(elapsed_sec, (int, float)):
+                            meta_bits.append(f"⏱ {float(elapsed_sec):.2f} s")
+                        if dims and all(isinstance(x, (int, float)) for x in dims):
+                            meta_bits.append(f"{int(dims[0])}×{int(dims[1])} px")
+                        if isinstance(size_bytes, int):
+                            meta_bits.append(f"{size_bytes/1024:.1f} KB")
+                        if meta_bits:
+                            st.caption(" • ".join(meta_bits))
                         if structured_data and len(structured_data) > 1:
                             st.success("Successfully extracted structured data")
                             st.json(structured_data)
@@ -628,6 +675,8 @@ if uploaded_files and process_button:
                     jpeg_quality=jpeg_quality,
                 )
                 st.session_state.results.append(result)
+                if isinstance(result, dict) and isinstance(result.get('duration_sec'), (int, float)):
+                    durations.append(float(result['duration_sec']))
                 
                 if structured_data and len(structured_data) > 1:
                     st.session_state.structured_results.append(structured_data)
@@ -639,6 +688,15 @@ if uploaded_files and process_button:
                     st.image(image, width=250)
                 with col2:
                     st.write(content)
+                    meta_bits = []
+                    if isinstance(result.get('duration_sec'), (int, float)):
+                        meta_bits.append(f"⏱ {float(result['duration_sec']):.2f} s")
+                    if isinstance(result.get('input_width'), int) and isinstance(result.get('input_height'), int):
+                        meta_bits.append(f"{result['input_width']}×{result['input_height']} px")
+                    if isinstance(result.get('encoded_bytes'), int):
+                        meta_bits.append(f"{result['encoded_bytes']/1024:.1f} KB")
+                    if meta_bits:
+                        st.caption(" • ".join(meta_bits))
                     if structured_data and len(structured_data) > 1:
                         st.success("Successfully extracted structured data")
                         st.json(structured_data)
@@ -651,7 +709,11 @@ if uploaded_files and process_button:
             processed_count += 1
             progress_bar.progress(processed_count / total_items)
     
+    batch_elapsed = time.perf_counter() - batch_start
     status_text.text("Processing complete!")
+    if durations:
+        avg = sum(durations) / max(len(durations), 1)
+        st.info(f"⏱ Total processing time: {batch_elapsed:.2f} s  |  Avg per item: {avg:.2f} s")
     
     # Create download buttons
     if st.session_state.results:
@@ -683,7 +745,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; margin-top: 20px; opacity: 0.7;">
-        Made with ❤️ by Adrian with Claude - <a href="https://ad1x.com" target="_blank">ad1x.com</a>
+        Made with ❤️ by Adrian with GPT-5 - <a href="https://ad1x.com" target="_blank">ad1x.com</a>
     </div>
     """, 
     unsafe_allow_html=True
