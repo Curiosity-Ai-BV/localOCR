@@ -89,7 +89,10 @@ with st.sidebar:
         "granite3.2-vision",
         "MHKetbi/Unsloth_gemma3-12b-it:latest",
     ]
-    model_options = get_available_models(default_models)
+    model_options = [
+        m for m in get_available_models(default_models)
+        if "gpt-oss" not in str(m).lower()
+    ]
     selected_model = st.selectbox(
         "Choose vision model:",
         model_options,
