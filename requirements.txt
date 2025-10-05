@@ -1,5 +1,4 @@
 streamlit>=1.0.0
 ollama>=0.1.0
 pillow>=9.0.0
-pandas>=1.0.0
-PyMuPDF>=1.19.0 
+PyMuPDF>=1.19.0

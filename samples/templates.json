@@ -1,0 +1,5 @@
+{
+  "description": "Describe the image focusing on text, layout, and any obvious document semantics.",
+  "extraction": "Extract these fields from the image: {fields}. Return strict JSON with these exact field names and no extra commentary. If a field is missing, use an empty string."
+}
+
