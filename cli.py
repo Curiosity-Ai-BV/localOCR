@@ -12,7 +12,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 from PIL import Image
 
 from adapters.ollama_adapter import ensure_model_available, query_ollama
-from core.pipeline import process_image, process_pdf
+from core.pdf_utils import PDFNotSupportedError, ensure_pdf_support, iter_pdf_pages
+from core.pipeline import process_image
 from core.templates import load_templates_file
 
 
@@ -57,31 +58,42 @@ def _process_file(
     filename = os.path.basename(path)
     try:
         if path.lower().endswith(".pdf"):
+            ensure_pdf_support()
             with open(path, "rb") as f:
                 file_bytes = f.read()
-            for page_info in process_pdf(
-                file_bytes,
-                filename,
-                fields,
-                pdf_pages,
-                model=model,
-                system_prompt=system_prompt,
-                options=options,
-                max_image_size=max_image_size,
-                jpeg_quality=jpeg_quality,
-                pdf_scale=pdf_scale,
-                inference=inference,
-            ):
-                page_num, page_count, image, page_filename, content, structured_data, elapsed_sec, dims, size_bytes = page_info
-                if page_num is None:
-                    results.append({"filename": page_filename, "description": content or "Error"})
-                else:
-                    r: Dict = {"filename": page_filename, "description": content or ""}
-                    if isinstance(elapsed_sec, (int, float)):
-                        r["duration_sec"] = float(elapsed_sec)
-                    results.append(r)
-                    if structured_data and len(structured_data) > 1:
-                        structured.append(structured_data)
+
+            def _handle_page(page_img: Image.Image, page_name: str) -> None:
+                result, content, structured_data = process_image(
+                    page_img,
+                    page_name,
+                    fields,
+                    model=model,
+                    system_prompt=system_prompt,
+                    options=options,
+                    max_image_size=max_image_size,
+                    jpeg_quality=jpeg_quality,
+                    inference=inference,
+                )
+                entry: Dict = {
+                    "filename": page_name,
+                    "description": content if fields is None else result.get("extraction", content),
+                }
+                if isinstance(result.get("duration_sec"), (int, float)):
+                    entry["duration_sec"] = float(result["duration_sec"])
+                results.append(entry)
+                if structured_data and len(structured_data) > 1:
+                    structured.append(structured_data)
+
+            if pdf_pages:
+                for page_index, _, img in iter_pdf_pages(file_bytes, scale=pdf_scale):
+                    page_name = f"{filename} (Page {page_index + 1})"
+                    _handle_page(img, page_name)
+            else:
+                first_entry = next(iter_pdf_pages(file_bytes, scale=pdf_scale), None)
+                if first_entry is None:
+                    raise RuntimeError("PDF contains no renderable pages.")
+                _, _, img = first_entry
+                _handle_page(img, filename)
         else:
             image = Image.open(path)
             result, content, structured_data = process_image(
@@ -98,6 +110,8 @@ def _process_file(
             results.append(result)
             if structured_data and len(structured_data) > 1:
                 structured.append(structured_data)
+    except PDFNotSupportedError as e:
+        results.append({"filename": filename, "description": f"Error: {e}"})
     except Exception as e:
         results.append({"filename": filename, "description": f"Error: {e}"})
     return results, structured

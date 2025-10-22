@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
 import time
-from typing import List, Optional, Tuple, Any, Dict, Generator, Iterable
+from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
 
 import streamlit as st
 from PIL import Image
@@ -36,11 +37,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-try:
-    import fitz  # type: ignore  # noqa: F401
-    PDF_SUPPORT = True
-except Exception:
-    PDF_SUPPORT = False
+from core.pdf_utils import get_pdf_page_count, is_pdf_supported
+
+PDF_SUPPORT = is_pdf_supported()
+if not PDF_SUPPORT:
     st.warning("PDF support requires PyMuPDF. Install it with: pip install pymupdf")
 
 ###############################################################################
@@ -53,6 +53,58 @@ DEFAULT_JPEG_QUALITY = 90
 DEFAULT_PDF_SCALE = 1.5
 
 JSONDict = Dict[str, Any]
+
+
+def _image_to_png_bytes(image: Image.Image) -> bytes:
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def render_results(placeholder, entries: List[Dict[str, Any]], show_images: bool, compact_view: bool) -> None:
+    """Render stored OCR results inside the provided placeholder."""
+    with placeholder.container():
+        st.subheader("Results")
+        if not entries:
+            st.info("No results yet. Upload files and run a scan.")
+            return
+
+        for entry in entries:
+            st.markdown(f"#### {entry['filename']}")
+            col1, col2 = st.columns([1, 2])
+            image_bytes = entry.get("image_bytes")
+            if show_images and image_bytes:
+                col1.image(
+                    image_bytes,
+                    width=(180 if compact_view else 250),
+                )
+            elif show_images:
+                col1.empty()
+            else:
+                col1.empty()
+
+            with col2:
+                st.markdown(entry["content"])
+                meta_bits: List[str] = []
+                duration = entry.get("duration_sec")
+                if isinstance(duration, (int, float)):
+                    meta_bits.append(f"⏱ {float(duration):.2f} s")
+                dims = entry.get("dimensions")
+                if isinstance(dims, tuple) and len(dims) == 2 and all(isinstance(x, (int, float)) for x in dims):
+                    meta_bits.append(f"{int(dims[0])}×{int(dims[1])} px")
+                encoded_bytes = entry.get("encoded_bytes")
+                if isinstance(encoded_bytes, (int, float)):
+                    meta_bits.append(f"{float(encoded_bytes) / 1024:.1f} KB")
+                if meta_bits:
+                    st.caption(" • ".join(meta_bits))
+            page_note = entry.get("page_note")
+            if isinstance(page_note, str) and page_note.strip():
+                st.info(page_note.strip())
+            structured = entry.get("structured_data")
+            if isinstance(structured, dict) and len(structured) > 1:
+                with st.expander("Structured JSON"):
+                    st.json(structured)
+            st.divider()
 
 
 from adapters.ollama_adapter import ensure_model_available, get_available_models
@@ -71,6 +123,8 @@ if 'results' not in st.session_state:
     st.session_state.results = []
 if 'structured_results' not in st.session_state:
     st.session_state.structured_results = []
+if 'display_entries' not in st.session_state:
+    st.session_state.display_entries = []
 
 # Create a sidebar for the file upload functionality
 with st.sidebar:
@@ -168,13 +222,14 @@ with st.sidebar:
         "num_predict": int(num_predict),
         "num_ctx": int(num_ctx),
     }
-    
+
     extraction_mode = "General description"
     pdf_process_mode = "Process each page separately"
     fields = None
-    
+
     if uploaded_files:
         st.write(f"Uploaded {len(uploaded_files)} files")
+        has_pdf_upload = any(file.name.lower().endswith(".pdf") for file in uploaded_files)
         
         # Add option for structured data extraction
         st.subheader("Extraction")
@@ -193,14 +248,16 @@ with st.sidebar:
                     "Enter fields to extract (comma separated):", 
                     value="Invoice number, Date, Company name, Total amount"
                 )
-                fields = [field.strip() for field in custom_fields.split(",")]
-            
-            # Option to process PDF pages separately or as a whole
-            if any(file.name.lower().endswith('.pdf') for file in uploaded_files):
-                pdf_process_mode = st.radio(
-                    "How to process PDF files:",
-                    ["Process each page separately", "Process entire PDF as one document"]
-                )
+                fields = [field.strip() for field in custom_fields.split(",") if field.strip()]
+
+        # Option to process PDF pages separately or as a whole when PDFs are present
+        if has_pdf_upload:
+            pdf_process_mode = st.radio(
+                "How to process PDF files:",
+                ["Process each page separately", "Process entire PDF as one document"],
+                key="pdf_process_mode",
+                help="Choose whether to run OCR on every page or treat the PDF as a single document.",
+            )
         
         # Process button in sidebar
         process_button = st.button("Run Scan")
@@ -208,16 +265,17 @@ with st.sidebar:
         st.info("Please upload images or PDF files to analyze")
         process_button = False
 
+results_placeholder = st.empty()
+
 # Main app logic
 if uploaded_files and process_button:
-    st.subheader("Results")
-    
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     # Clear previous results when starting a new batch
     st.session_state.results = []
     st.session_state.structured_results = []
+    st.session_state.display_entries = []
 
     # Verify model availability
     available, availability_note = ensure_model_available(selected_model)
@@ -238,8 +296,8 @@ if uploaded_files and process_button:
         if uploaded_file.name.lower().endswith('.pdf') and PDF_SUPPORT:
             if pdf_process_mode == "Process each page separately":
                 try:
-                    pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
-                    total_items += len(pdf_document)
+                    page_total = get_pdf_page_count(file_bytes)
+                    total_items += page_total
                 except Exception as e:
                     st.error(f"Error checking PDF {uploaded_file.name}: {e}")
                     total_items += 1
@@ -287,42 +345,38 @@ if uploaded_files and process_button:
                         continue
                     
                     status_text.text(f"Processing {page_filename} ({page_num+1}/{page_count})")
-                    
+
                     # Add to session state
                     result = {'filename': page_filename, 'description': content}
                     if isinstance(elapsed_sec, (int, float)):
-                        result['duration_sec'] = round(float(elapsed_sec), 3)
+                        duration_clean = round(float(elapsed_sec), 3)
+                        result['duration_sec'] = duration_clean
                         durations.append(float(elapsed_sec))
                     st.session_state.results.append(result)
-                    
+
                     if structured_data and len(structured_data) > 1:
                         st.session_state.structured_results.append(structured_data)
-                    
-                    # Display the processed image and its results
-                    st.markdown(f"#### {page_filename}")
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
-                        if show_images:
-                            st.image(image, width=(180 if compact_view else 250))
-                        if page_count > 1 and not process_separately:
-                            st.info(f"PDF has {page_count} pages. Showing first page only.")
-                    with col2:
-                        st.markdown(content)
-                        meta_bits = []
-                        if isinstance(elapsed_sec, (int, float)):
-                            meta_bits.append(f"⏱ {float(elapsed_sec):.2f} s")
-                        if dims and all(isinstance(x, (int, float)) for x in dims):
-                            meta_bits.append(f"{int(dims[0])}×{int(dims[1])} px")
-                        if isinstance(size_bytes, int):
-                            meta_bits.append(f"{size_bytes/1024:.1f} KB")
-                        if meta_bits:
-                            st.caption(" • ".join(meta_bits))
-                        if structured_data and len(structured_data) > 1:
-                            with st.expander("Structured JSON"):
-                                st.json(structured_data)
-                    
-                    st.divider()
-                    
+
+                    clean_dims: Optional[Tuple[int, int]] = None
+                    if isinstance(dims, tuple) and len(dims) == 2 and all(isinstance(x, (int, float)) for x in dims):
+                        clean_dims = (int(dims[0]), int(dims[1]))
+
+                    entry: Dict[str, Any] = {
+                        "filename": page_filename,
+                        "content": content,
+                        "duration_sec": result.get("duration_sec"),
+                        "dimensions": clean_dims,
+                        "encoded_bytes": size_bytes,
+                        "structured_data": structured_data if isinstance(structured_data, dict) else None,
+                        "image_bytes": _image_to_png_bytes(image) if isinstance(image, Image.Image) else None,
+                        "page_note": None,
+                    }
+                    if page_count and page_count > 1 and not process_separately:
+                        entry["page_note"] = f"PDF has {page_count} pages. Showing first page only."
+
+                    st.session_state.display_entries.append(entry)
+                    render_results(results_placeholder, st.session_state.display_entries, show_images, compact_view)
+
                     processed_count += 1
                     progress_bar.progress(min(processed_count / total_items, 1.0))
                     
@@ -353,29 +407,24 @@ if uploaded_files and process_button:
                 
                 if structured_data and len(structured_data) > 1:
                     st.session_state.structured_results.append(structured_data)
-                
-                # Display the processed image and its results
-                st.markdown(f"#### Image: {uploaded_file.name}")
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    if show_images:
-                        st.image(image, width=(180 if compact_view else 250))
-                with col2:
-                    st.markdown(content)
-                    meta_bits = []
-                    if isinstance(result.get('duration_sec'), (int, float)):
-                        meta_bits.append(f"⏱ {float(result['duration_sec']):.2f} s")
-                    if isinstance(result.get('input_width'), int) and isinstance(result.get('input_height'), int):
-                        meta_bits.append(f"{result['input_width']}×{result['input_height']} px")
-                    if isinstance(result.get('encoded_bytes'), int):
-                        meta_bits.append(f"{result['encoded_bytes']/1024:.1f} KB")
-                    if meta_bits:
-                        st.caption(" • ".join(meta_bits))
-                    if structured_data and len(structured_data) > 1:
-                        with st.expander("Structured JSON"):
-                            st.json(structured_data)
-                
-                st.divider()
+
+                entry: Dict[str, Any] = {
+                    "filename": f"Image: {uploaded_file.name}",
+                    "content": content,
+                    "duration_sec": result.get('duration_sec'),
+                    "dimensions": (
+                        (int(result.get('input_width')), int(result.get('input_height')))
+                        if isinstance(result.get('input_width'), int) and isinstance(result.get('input_height'), int)
+                        else None
+                    ),
+                    "encoded_bytes": result.get('encoded_bytes'),
+                    "structured_data": structured_data if isinstance(structured_data, dict) else None,
+                    "image_bytes": _image_to_png_bytes(image) if isinstance(image, Image.Image) else None,
+                    "page_note": None,
+                }
+
+                st.session_state.display_entries.append(entry)
+                render_results(results_placeholder, st.session_state.display_entries, show_images, compact_view)
                 
             except Exception as e:
                 st.error(f"Error processing image {uploaded_file.name}: {e}")
@@ -388,17 +437,19 @@ if uploaded_files and process_button:
     if durations:
         avg = sum(durations) / max(len(durations), 1)
         st.info(f"⏱ Total processing time: {batch_elapsed:.2f} s  |  Avg per item: {avg:.2f} s")
-    
-    # Create download buttons
-    if st.session_state.results:
-        create_download_buttons(
-            st.session_state.results,
-            st.session_state.structured_results,
-            extraction_mode,
-        )
+else:
+    if st.session_state.display_entries:
+        render_results(results_placeholder, st.session_state.display_entries, show_images, compact_view)
+# Create download buttons outside processing flow so reruns keep data available
+if st.session_state.results:
+    create_download_buttons(
+        st.session_state.results,
+        st.session_state.structured_results,
+        extraction_mode,
+    )
 
 # Display instructions when no files are processed yet
-if not uploaded_files:
+if not uploaded_files and not st.session_state.results:
     st.info("👈 Add files on the left to get started")
     st.write("""
     ## How to use this app:

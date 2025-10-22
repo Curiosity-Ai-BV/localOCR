@@ -8,13 +8,8 @@ from PIL import Image
 from adapters.ollama_adapter import query_ollama
 from core.image_utils import DEFAULT_JPEG_QUALITY, DEFAULT_MAX_IMAGE_SIZE, image_to_base64, resize_image
 from core.json_extract import extract_structured_data
+from core.pdf_utils import PDFNotSupportedError, ensure_pdf_support, iter_pdf_pages
 from core.templates import build_description_prompt, build_extraction_prompt
-
-try:
-    import fitz  # type: ignore
-    PDF_SUPPORT = True
-except Exception:
-    PDF_SUPPORT = False
 
 JSONDict = Dict[str, object]
 
@@ -86,19 +81,27 @@ def process_pdf(
     jpeg_quality: int,
     pdf_scale: float,
     inference: Optional[Callable[[str, str, str], str]] = None,
-) -> Generator[Tuple[Optional[int], Optional[int], Optional[Image.Image], str, str, Optional[JSONDict], Optional[float], Optional[Tuple[int,int]], Optional[int]], None, None]:
+) -> Generator[
+    Tuple[
+        Optional[int],
+        Optional[int],
+        Optional[Image.Image],
+        str,
+        str,
+        Optional[JSONDict],
+        Optional[float],
+        Optional[Tuple[int, int]],
+        Optional[int],
+    ],
+    None,
+    None,
+]:
     """Process a PDF file using PyMuPDF, yielding page-level results."""
     try:
-        pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
-        page_count = len(pdf_document)
-
+        ensure_pdf_support()
         if process_pages_separately:
-            for page_num in range(page_count):
-                page = pdf_document[page_num]
-                pix = page.get_pixmap(matrix=fitz.Matrix(pdf_scale, pdf_scale))
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            for page_num, page_count, img in iter_pdf_pages(file_bytes, scale=pdf_scale):
                 page_filename = f"{filename} (Page {page_num + 1})"
-
                 result, content, structured_data = process_image(
                     img,
                     page_filename,
@@ -115,10 +118,10 @@ def process_pdf(
                 size_bytes = result.get("encoded_bytes") if isinstance(result, dict) else None
                 yield page_num, page_count, img, page_filename, content, structured_data, elapsed, dims, size_bytes
         else:
-            page = pdf_document[0]
-            pix = page.get_pixmap(matrix=fitz.Matrix(pdf_scale, pdf_scale))
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
+            first = next(iter_pdf_pages(file_bytes, scale=pdf_scale), None)
+            if first is None:
+                raise RuntimeError("PDF contains no renderable pages.")
+            page_num, page_count, img = first
             result, content, structured_data = process_image(
                 img,
                 filename,
@@ -134,6 +137,7 @@ def process_pdf(
             dims = (result.get("input_width"), result.get("input_height")) if isinstance(result, dict) else None
             size_bytes = result.get("encoded_bytes") if isinstance(result, dict) else None
             yield 0, page_count, img, filename, content, structured_data, elapsed, dims, size_bytes
+    except PDFNotSupportedError as e:
+        yield None, None, None, filename, str(e), None, None, None, None
     except Exception as e:
         yield None, None, None, filename, f"Error processing PDF: {str(e)}", None, None, None, None
-
