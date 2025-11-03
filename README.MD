@@ -104,6 +104,8 @@ python cli.py \
   --model gemma3:12b \
   --mode extract \
   --fields "Invoice number, Date, Total amount" \
+  --pdf-pages \
+  --pdf-scale 1.5 \
   --templates templates.json \
   --schema schema.json \
   --max-concurrency 2 \
@@ -115,6 +117,8 @@ python cli.py \
 
 - `--mode description|extract`: general description vs extracting specific fields
 - `--fields`: comma‑separated field names (for extract mode)
+- `--pdf-pages`: split PDFs so each page is processed and exported separately
+- `--pdf-scale`: adjust render DPI before OCR (higher values sharpen text but take longer)
 - `--max-concurrency`: number of files to process in parallel
 - `--rate-limit`: requests per second (0 = unlimited)
 - Also available: temperature, top‑p, tokens, context, max image size, JPEG quality, and PDF scale
@@ -213,4 +217,4 @@ Open the “Advanced Model Options” expander in the sidebar to configure:
 
 ---
 
-Made with ❤️ by Adrian with GPT-5 — [ad1x.com](https://ad1x.com)
+Made with ❤️ by Adrian with GPT-5-Codex — [ad1x.com](https://ad1x.com)

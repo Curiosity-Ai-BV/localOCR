@@ -3,6 +3,7 @@ import io
 import pytest
 from PIL import Image
 
+from core.pdf_utils import get_pdf_page_count, iter_pdf_pages
 from core.pipeline import process_pdf
 
 try:
@@ -69,3 +70,17 @@ def test_process_pdf_per_page_with_extraction():
     assert structured_data is not None
     assert structured_data.get("Invoice number") == "X-1"
 
+
+def test_iter_pdf_pages_returns_images():
+    pdf_bytes = make_pdf_bytes()
+    pages = list(iter_pdf_pages(pdf_bytes, scale=1.0))
+    assert len(pages) == 1
+    page_index, page_count, image = pages[0]
+    assert page_index == 0
+    assert page_count == 1
+    assert isinstance(image, Image.Image)
+
+
+def test_get_pdf_page_count():
+    pdf_bytes = make_pdf_bytes()
+    assert get_pdf_page_count(pdf_bytes) == 1
