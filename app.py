@@ -141,6 +141,7 @@ with st.sidebar:
         "gemma3:12b",
         "llama3.2-vision",
         "granite3.2-vision",
+        "deepseek-ocr",
         "MHKetbi/Unsloth_gemma3-12b-it:latest",
     ]
     model_options = [

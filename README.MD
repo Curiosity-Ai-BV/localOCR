@@ -58,6 +58,9 @@ ollama pull llama3.2-vision
 
 # Granite 3.2 Vision (smaller footprint)
 ollama pull granite3.2-vision
+
+# DeepSeek OCR
+ollama pull deepseek-ocr
 ```
 
 Pull one or more — the app works with whichever you have installed.
