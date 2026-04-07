@@ -131,7 +131,9 @@ def main():
         ground_truth = json.load(f)
         
     fields_to_extract = list(next(iter(ground_truth.values())).keys())
-    model_name = "gemma3:12b"
+    model_name = os.environ.get("EVAL_MODEL", "gemma3:12b")
+    max_images = int(os.environ.get("EVAL_MAX_IMAGES", "0"))
+    
     options = {"temperature": 0.0, "top_p": 1.0, "num_predict": 512, "num_ctx": 4096}
     system_prompt = None
     limiter = RateLimiter(None)
@@ -141,12 +143,16 @@ def main():
     if is_ollama_running():
         inference = _make_inference(options, system_prompt, limiter)
         
+        count = 0
         for filename, expected in ground_truth.items():
+            if max_images > 0 and count >= max_images:
+                break
+                
             filepath = os.path.join(dataset_dir, filename)
             if not os.path.exists(filepath):
                 continue
                 
-            print(f"Processing {filename}...")
+            print(f"Processing {filename} using {model_name}...")
             r, structured = _process_file(
                 filepath,
                 fields=fields_to_extract,
@@ -164,6 +170,7 @@ def main():
                 all_extracted[filename] = structured[0]
             else:
                 all_extracted[filename] = {}
+            count += 1
     else:
         if not args.allow_mock:
             print(

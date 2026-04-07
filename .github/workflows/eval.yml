@@ -35,11 +35,12 @@ jobs:
         
     - name: Pull Vision Model
       run: |
-        # Using a smaller model for CI to avoid memory limits on standard runners
-        # or pull the default model used by evaluate.py
-        # Here we pull gemma3:12b as it's the one referenced in evaluate.py
-        ollama pull gemma3:12b
+        # Using a smaller model (granite3.2-vision) for CI to avoid memory limits and timeouts on standard standard runners
+        ollama pull granite3.2-vision
         
     - name: Run automated evaluation
+      env:
+        EVAL_MODEL: granite3.2-vision
+        EVAL_MAX_IMAGES: 2
       run: |
         python evaluate.py
