@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import io
 import os
 import sys
 import time
@@ -11,33 +9,54 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from PIL import Image
 
-from adapters.ollama_adapter import ensure_model_available, query_ollama
+from adapters.ollama_adapter import query_ollama, resolve_model_name
+from core.errors import OCRError
+from core.export import write_results
+from core.logging import get_logger
+from core.models import Result
 from core.pdf_utils import PDFNotSupportedError, ensure_pdf_support, iter_pdf_pages
-from core.pipeline import process_image
-from core.templates import load_templates_file
+from core.pipeline import BatchConfig, BatchJob, process_image, run_batch
+from core.prompts import PromptConfig
+from core.settings import Settings
+from core.templates import load_templates_file  # noqa: F401 (back-compat export)
+
+_log = get_logger("cli")
 
 
 class RateLimiter:
     def __init__(self, per_second: Optional[float] = None):
         self.per_second = per_second
         self._last = 0.0
+        import threading
+        self._lock = threading.Lock()
 
     def wait(self) -> None:
         if not self.per_second or self.per_second <= 0:
             return
-        now = time.monotonic()
-        min_interval = 1.0 / float(self.per_second)
-        delta = now - self._last
-        if delta < min_interval:
-            time.sleep(min_interval - delta)
-        self._last = time.monotonic()
+        with self._lock:
+            now = time.monotonic()
+            min_interval = 1.0 / float(self.per_second)
+            delta = now - self._last
+            if delta < min_interval:
+                time.sleep(min_interval - delta)
+            self._last = time.monotonic()
 
 
-def _make_inference(options: Dict, system_prompt: Optional[str], limiter: RateLimiter) -> Callable[[str, str, str], str]:
+def _make_inference(
+    options: Dict,
+    system_prompt: Optional[str],
+    limiter: RateLimiter,
+) -> Callable[[str, str, str], str]:
     def _inner(prompt: str, image_b64: str, model: str) -> str:
         limiter.wait()
         return query_ollama(prompt, image_b64, model, options=options, system_prompt=system_prompt)
     return _inner
+
+
+# ---------------------------------------------------------------------------
+# Back-compat shim: a few external scripts (e.g. evaluate.py) import
+# ``_process_file`` directly. Keep the signature + return shape intact.
+# ---------------------------------------------------------------------------
 
 
 def _process_file(
@@ -52,6 +71,7 @@ def _process_file(
     pdf_scale: float,
     pdf_pages: bool,
     inference: Callable[[str, str, str], str],
+    prompts: Optional[PromptConfig] = None,
 ) -> Tuple[List[Dict], List[Dict]]:
     results: List[Dict] = []
     structured: List[Dict] = []
@@ -73,6 +93,7 @@ def _process_file(
                     max_image_size=max_image_size,
                     jpeg_quality=jpeg_quality,
                     inference=inference,
+                    prompts=prompts,
                 )
                 entry: Dict = {
                     "filename": page_name,
@@ -106,47 +127,26 @@ def _process_file(
                 max_image_size=max_image_size,
                 jpeg_quality=jpeg_quality,
                 inference=inference,
+                prompts=prompts,
             )
             results.append(result)
             if structured_data and len(structured_data) > 1:
                 structured.append(structured_data)
     except PDFNotSupportedError as e:
         results.append({"filename": filename, "description": f"Error: {e}"})
+    except OCRError as e:
+        results.append({"filename": filename, "description": f"Error: {e}"})
     except Exception as e:
+        _log.exception("cli_file_failed", extra={"path": path})
         results.append({"filename": filename, "description": f"Error: {e}"})
     return results, structured
 
 
-def write_csv(results: List[Dict], path: str) -> None:
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(["Filename", "Description"])
-    for r in results:
-        w.writerow([r.get("filename", ""), r.get("description", r.get("extraction", ""))])
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        f.write(buf.getvalue())
-
-
-def write_structured(structured: List[Dict], path: str) -> None:
-    if not structured:
-        return
-    all_fields = set(["filename"])
-    for r in structured:
-        all_fields.update(r.keys())
-    field_list = sorted(all_fields)
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(field_list)
-    for r in structured:
-        w.writerow([r.get(f, "") for f in field_list])
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        f.write(buf.getvalue())
-
-
 def main(argv: Optional[List[str]] = None) -> int:
+    settings = Settings.from_env()
     p = argparse.ArgumentParser(description="Headless OCR/Vision batch scans via Ollama")
     p.add_argument("files", nargs="+", help="Image or PDF files to process")
-    p.add_argument("--model", default="gemma4:latest", help="Model name")
+    p.add_argument("--model", default=settings.default_model, help="Model name")
     p.add_argument("--mode", choices=["description", "extract"], default="description")
     p.add_argument("--fields", default="", help="Comma-separated fields for extract mode")
     p.add_argument("--system-prompt", default="", help="Optional system prompt")
@@ -156,13 +156,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--top-p", type=float, default=0.9)
     p.add_argument("--num-predict", type=int, default=512)
     p.add_argument("--num-ctx", type=int, default=4096)
-    p.add_argument("--max-image-size", type=int, default=1920)
-    p.add_argument("--jpeg-quality", type=int, default=90)
-    p.add_argument("--pdf-scale", type=float, default=1.5)
+    p.add_argument("--max-image-size", type=int, default=settings.max_image_size)
+    p.add_argument("--jpeg-quality", type=int, default=settings.jpeg_quality)
+    p.add_argument("--pdf-scale", type=float, default=settings.pdf_scale)
     p.add_argument("--pdf-pages", action="store_true", help="Process each PDF page separately")
     p.add_argument("--out-results", default="results.csv")
     p.add_argument("--out-structured", default="structured.csv")
-    p.add_argument("--max-concurrency", type=int, default=1)
+    p.add_argument("--out-jsonl", default="", help="Optional path to write results as JSONL")
+    p.add_argument("--max-concurrency", type=int, default=settings.max_concurrency)
     p.add_argument("--rate-limit", type=float, default=0.0, help="Requests per second (0 = unlimited)")
 
     args = p.parse_args(argv)
@@ -179,9 +180,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "num_ctx": int(args.num_ctx),
     }
 
+    prompts = PromptConfig()
     if args.templates:
         try:
-            load_templates_file(args.templates)
+            prompts = PromptConfig.from_file(args.templates)
         except Exception as e:
             print(f"[!] Failed to load templates: {e}")
 
@@ -199,7 +201,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             fields = [s.strip() for s in args.fields.split(",") if s.strip()]
     system_prompt = args.system_prompt or None
 
-    available, note = ensure_model_available(args.model)
+    available, resolved_model, note = resolve_model_name(args.model)
     if note:
         print(f"[!] {note}")
     if not available:
@@ -208,58 +210,48 @@ def main(argv: Optional[List[str]] = None) -> int:
     limiter = RateLimiter(args.rate_limit if args.rate_limit > 0 else None)
     inference = _make_inference(options, system_prompt, limiter)
 
-    all_results: List[Dict] = []
-    all_structured: List[Dict] = []
+    run_settings = settings.merged(
+        max_image_size=args.max_image_size,
+        jpeg_quality=args.jpeg_quality,
+        pdf_scale=args.pdf_scale,
+    )
+    cfg = BatchConfig(
+        model=resolved_model,
+        fields=fields,
+        system_prompt=system_prompt,
+        options=options,
+        settings=run_settings,
+        prompts=prompts,
+        pdf_pages_separately=args.pdf_pages,
+        inference=inference,
+    )
+
+    all_results: List[Result] = []
 
     start = time.perf_counter()
     if args.max_concurrency <= 1:
-        for fpath in files:
-            r, s = _process_file(
-                fpath,
-                fields=fields,
-                model=args.model,
-                system_prompt=system_prompt,
-                options=options,
-                max_image_size=args.max_image_size,
-                jpeg_quality=args.jpeg_quality,
-                pdf_scale=args.pdf_scale,
-                pdf_pages=args.pdf_pages,
-                inference=inference,
-            )
-            all_results.extend(r)
-            all_structured.extend(s)
+        for r in run_batch(files, cfg):
+            all_results.append(r)
     else:
+        # Preserve per-file ordering semantics by submitting each file as one job.
         with ThreadPoolExecutor(max_workers=args.max_concurrency) as ex:
-            futs = [
-                ex.submit(
-                    _process_file,
-                    fpath,
-                    fields=fields,
-                    model=args.model,
-                    system_prompt=system_prompt,
-                    options=options,
-                    max_image_size=args.max_image_size,
-                    jpeg_quality=args.jpeg_quality,
-                    pdf_scale=args.pdf_scale,
-                    pdf_pages=args.pdf_pages,
-                    inference=inference,
-                )
-                for fpath in files
-            ]
+            futs = [ex.submit(lambda f=fpath: list(run_batch([f], cfg))) for fpath in files]
             for fut in as_completed(futs):
-                r, s = fut.result()
-                all_results.extend(r)
-                all_structured.extend(s)
+                all_results.extend(fut.result())
 
     elapsed = time.perf_counter() - start
     print(f"Processed {len(files)} file(s) in {elapsed:.2f}s")
 
-    write_csv(all_results, args.out_results)
-    if all_structured:
-        write_structured(all_structured, args.out_structured)
-        print(f"Wrote: {args.out_results} and {args.out_structured}")
-    else:
-        print(f"Wrote: {args.out_results}")
+    write_results(all_results, args.out_results, format="csv")
+    structured_any = any(r.fields for r in all_results)
+    wrote = [args.out_results]
+    if structured_any:
+        write_results(all_results, args.out_structured, format="structured_csv")
+        wrote.append(args.out_structured)
+    if args.out_jsonl:
+        write_results(all_results, args.out_jsonl, format="jsonl")
+        wrote.append(args.out_jsonl)
+    print("Wrote: " + ", ".join(wrote))
 
     return 0
 

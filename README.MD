@@ -4,19 +4,20 @@
 
 A streamlined Streamlit app that uses local AI vision models (via Ollama) to analyze images and PDFs. Upload multiple files, choose a model, get detailed descriptions or extract structured fields, and export the results to CSV.
 
-## What’s New (Single‑file, High‑quality Refresh)
+## What’s New
 
-- Robust JSON extraction from model outputs (fenced blocks, brace scanning, and heuristics)
+- Modular architecture: core pipeline, adapters, and UI components fully separated
+- Immutable `PromptConfig` threaded through the pipeline — no more global prompt state (safe under CLI concurrency)
+- Typed `Result` model and a single unified exporter (CSV, structured CSV, JSONL)
+- Central `Settings` dataclass with environment‑variable overrides (`LOCALOCR_*`)
+- Hardened Ollama adapter: exact‑match model resolution, TTL‑cached model listing, typed errors (`ModelUnavailable`, `ParseError`, `PDFError`), and streaming support
+- Structured logging via `core/logging.py`
+- Per‑file status chips (queued/running/done/error) in the Streamlit UI
+- Session‑isolated results in Streamlit (safe for shared deployments)
+- Robust JSON extraction from model outputs (fenced blocks, brace scanning, heuristics)
 - Advanced model options in the sidebar (temperature, top‑p, max tokens, context length)
-- Optional system prompt to steer model behavior
-- Adjustable image resize and JPEG quality for better performance and output
-- PDF render scale control for PDFs (affects page → image resolution)
-- Model availability check with actionable guidance when models are missing
-- Clearer errors and progress feedback
-- Processing time display per item and batch (see how settings affect latency)
-- Minimalist, modern UI refresh with compact mode and a cleaner export panel
-
-Additionally, each item now shows the actual model input size (WxH) and the encoded JPEG size in KB, so you can confirm preprocessing is applied before inference.
+- Optional system prompt, adjustable image resize, JPEG quality, PDF render scale
+- Each item shows the actual model input size (WxH) and encoded JPEG size in KB
 
 ## What this application does
 
