@@ -1,14 +1,24 @@
+"""Back-compat shim for the old ``core.templates`` module.
+
+The canonical API now lives in :mod:`core.prompts` as an immutable
+``PromptConfig`` dataclass. These functions remain only to avoid breaking
+external callers; new code should use ``PromptConfig`` directly.
+"""
 from __future__ import annotations
 
-import json
 from typing import Optional
 
-DESCRIPTION_PROMPT = "Describe what you see in this image in detail."
-
-EXTRACTION_PROMPT = (
-    "Extract the following information from this image: {fields}. "
-    "Return the results in JSON format with these exact field names."
+from core.prompts import (
+    DEFAULT_DESCRIPTION_PROMPT as _DEFAULT_DESCRIPTION,
+    DEFAULT_EXTRACTION_PROMPT as _DEFAULT_EXTRACTION,
+    PromptConfig,
 )
+
+# Module-level mutable state is retained purely for back-compat with
+# third-party callers. Internal code paths (pipeline, CLI, UI) now thread
+# a ``PromptConfig`` instance explicitly and do NOT read these globals.
+DESCRIPTION_PROMPT = _DEFAULT_DESCRIPTION
+EXTRACTION_PROMPT = _DEFAULT_EXTRACTION
 
 
 def build_description_prompt() -> str:
@@ -16,8 +26,7 @@ def build_description_prompt() -> str:
 
 
 def build_extraction_prompt(fields: list[str]) -> str:
-    fields_str = ", ".join(fields)
-    return EXTRACTION_PROMPT.format(fields=fields_str)
+    return EXTRACTION_PROMPT.format(fields=", ".join(fields))
 
 
 def set_templates(description: Optional[str] = None, extraction: Optional[str] = None) -> None:
@@ -29,9 +38,10 @@ def set_templates(description: Optional[str] = None, extraction: Optional[str] =
 
 
 def load_templates_file(path: str) -> None:
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    set_templates(
-        description=data.get("description"),
-        extraction=data.get("extraction"),
-    )
+    cfg = PromptConfig.from_file(path)
+    set_templates(description=cfg.description, extraction=cfg.extraction)
+
+
+def current_prompt_config() -> PromptConfig:
+    """Return a ``PromptConfig`` snapshot of the current module globals."""
+    return PromptConfig(description=DESCRIPTION_PROMPT, extraction=EXTRACTION_PROMPT)

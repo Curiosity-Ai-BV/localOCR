@@ -31,3 +31,10 @@ def image_to_base64(image: Image.Image, quality: int = DEFAULT_JPEG_QUALITY) -> 
     raw = img_byte_arr.getvalue()
     return base64.b64encode(raw).decode("utf-8"), len(raw)
 
+
+def image_to_png_bytes(image: Image.Image) -> bytes:
+    if image.mode not in ("RGB", "RGBA", "L"):
+        image = image.convert("RGB")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()

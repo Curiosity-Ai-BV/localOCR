@@ -1,9 +1,11 @@
+import argparse
 import json
 import os
 import re
 import sys
+from typing import Any, Dict
+
 import matplotlib.pyplot as plt
-from typing import Dict, List, Any
 import requests
 
 try:
@@ -104,6 +106,19 @@ def generate_mock_results(ground_truth: Dict[str, Dict[str, str]]):
     return results
 
 def main():
+    parser = argparse.ArgumentParser(description="Evaluate localOCR against ground truth.")
+    parser.add_argument(
+        "--allow-mock",
+        action="store_true",
+        help="Fall back to deterministic mock results if Ollama is not running.",
+    )
+    parser.add_argument(
+        "--no-readme",
+        action="store_true",
+        help="Skip updating README.MD with the computed metrics.",
+    )
+    args = parser.parse_args()
+
     dataset_dir = "eval_dataset"
     gt_path = os.path.join(dataset_dir, "ground_truth.json")
     chart_path = "eval_results.png"
@@ -150,6 +165,13 @@ def main():
             else:
                 all_extracted[filename] = {}
     else:
+        if not args.allow_mock:
+            print(
+                "Error: Ollama is not running. Re-run with --allow-mock to use "
+                "deterministic mock data (README will not be updated).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         all_extracted = generate_mock_results(ground_truth)
 
     # Compute Metrics
@@ -170,7 +192,10 @@ def main():
         print(f"Accuracy for {field}: {accuracy*100:.1f}%")
         
     create_chart(final_metrics, chart_path)
-    update_readme(final_metrics, chart_path)
+    if not args.no_readme and not args.allow_mock:
+        update_readme(final_metrics, chart_path)
+    else:
+        print("Skipping README update.")
     print("Evaluation completed successfully.")
 
 if __name__ == "__main__":
