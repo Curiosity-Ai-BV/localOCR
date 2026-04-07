@@ -1,0 +1,45 @@
+name: Build and Evaluate
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+        
+    - name: Install Ollama
+      run: |
+        curl -fsSL https://ollama.com/install.sh | sh
+        
+    - name: Start Ollama Server
+      run: |
+        ollama serve &
+        # Wait for ollama to be ready
+        sleep 5
+        
+    - name: Pull Vision Model
+      run: |
+        # Using a smaller model for CI to avoid memory limits on standard runners
+        # or pull the default model used by evaluate.py
+        # Here we pull gemma3:12b as it's the one referenced in evaluate.py
+        ollama pull gemma3:12b
+        
+    - name: Run automated evaluation
+      run: |
+        python evaluate.py

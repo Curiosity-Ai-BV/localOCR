@@ -21,7 +21,7 @@ Additionally, each item now shows the actual model input size (WxH) and the enco
 ## What this application does
 
 - Upload multiple images (JPG, PNG) and PDF documents
-- Choose Gemma 3 12B, Llama 3.2 Vision, Granite 3.2 Vision, or your own local model
+- Choose Gemma 4, Gemma 3 12B, Llama 3.2 Vision, Granite 3.2 Vision, or your own local model
 - Get detailed descriptions or extract custom fields (invoice no., dates, amounts, etc.)
 - Process PDF files page-by-page or as a single document
 - Export results as standard CSV and structured CSV (for extraction mode)
@@ -50,6 +50,13 @@ brew install ollama
 ### Step 2: Pull a vision model
 
 ```bash
+# Gemma 4 (all flavours)
+ollama pull gemma4:latest
+ollama pull gemma4:e4b
+ollama pull gemma4:e2b
+ollama pull gemma4:26b
+ollama pull gemma4:31b
+
 # Gemma 3 Vision
 ollama pull gemma3:12b
 
@@ -58,6 +65,9 @@ ollama pull llama3.2-vision
 
 # Granite 3.2 Vision (smaller footprint)
 ollama pull granite3.2-vision
+
+# DeepSeek OCR
+ollama pull deepseek-ocr
 ```
 
 Pull one or more — the app works with whichever you have installed.
@@ -101,7 +111,7 @@ You can now process files without the UI:
 
 ```bash
 python cli.py \
-  --model gemma3:12b \
+  --model gemma4:latest \
   --mode extract \
   --fields "Invoice number, Date, Total amount" \
   --pdf-pages \
@@ -218,3 +228,20 @@ Open the “Advanced Model Options” expander in the sidebar to configure:
 ---
 
 Made with ❤️ by Adrian with GPT-5-Codex — [ad1x.com](https://ad1x.com)
+
+## Automated Evaluation Results
+
+This project includes an automated evaluation pipeline validating extraction accuracy against a ground truth dataset of invoices.
+
+### Accuracy by Field
+
+| Field | Accuracy |
+|-------|----------|
+| Invoice Number | 90.0% |
+| Date | 100.0% |
+| Total | 100.0% |
+
+![Evaluation Chart](eval_results.png)
+
+*(Run `python evaluate.py` to regenerate these metrics and chart)*
+
