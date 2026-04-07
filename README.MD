@@ -228,3 +228,20 @@ Open the “Advanced Model Options” expander in the sidebar to configure:
 ---
 
 Made with ❤️ by Adrian with GPT-5-Codex — [ad1x.com](https://ad1x.com)
+
+## Automated Evaluation Results
+
+This project includes an automated evaluation pipeline validating extraction accuracy against a ground truth dataset of invoices.
+
+### Accuracy by Field
+
+| Field | Accuracy |
+|-------|----------|
+| Invoice Number | 90.0% |
+| Date | 100.0% |
+| Total | 100.0% |
+
+![Evaluation Chart](eval_results.png)
+
+*(Run `python evaluate.py` to regenerate these metrics and chart)*
+
