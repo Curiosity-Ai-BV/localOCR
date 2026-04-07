@@ -138,6 +138,12 @@ with st.sidebar:
     # Model selection
     st.subheader("Model")
     default_models = [
+        "gemma4:latest",
+        "gemma4",
+        "gemma4:e4b",
+        "gemma4:e2b",
+        "gemma4:26b",
+        "gemma4:31b",
         "gemma3:12b",
         "llama3.2-vision",
         "granite3.2-vision",
@@ -463,7 +469,7 @@ if not uploaded_files and not st.session_state.results:
     7. View the results for each image or PDF page
     8. Download results as a CSV file
     
-    This app uses either the Gemma 3 12B vision model or Llama 3.2 Vision model to analyze images and PDFs.
+    This app uses either the Gemma 4, Gemma 3 12B vision model or Llama 3.2 Vision model to analyze images and PDFs.
     """)
 
 # Add a footer with attribution

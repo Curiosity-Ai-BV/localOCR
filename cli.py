@@ -146,7 +146,7 @@ def write_structured(structured: List[Dict], path: str) -> None:
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Headless OCR/Vision batch scans via Ollama")
     p.add_argument("files", nargs="+", help="Image or PDF files to process")
-    p.add_argument("--model", default="gemma3:12b", help="Model name")
+    p.add_argument("--model", default="gemma4:latest", help="Model name")
     p.add_argument("--mode", choices=["description", "extract"], default="description")
     p.add_argument("--fields", default="", help="Comma-separated fields for extract mode")
     p.add_argument("--system-prompt", default="", help="Optional system prompt")
