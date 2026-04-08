@@ -46,10 +46,10 @@ def _make_inference(
     options: Dict,
     system_prompt: Optional[str],
     limiter: RateLimiter,
-) -> Callable[[str, str, str], str]:
-    def _inner(prompt: str, image_b64: str, model: str) -> str:
+) -> Callable:
+    def _inner(prompt: str, image_b64: str, model: str, **kwargs) -> str:
         limiter.wait()
-        return query_ollama(prompt, image_b64, model, options=options, system_prompt=system_prompt)
+        return query_ollama(prompt, image_b64, model, options=options, system_prompt=system_prompt, **kwargs)
     return _inner
 
 

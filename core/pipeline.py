@@ -60,8 +60,8 @@ def process_image(
 
     run_infer = inference
     if run_infer is None:
-        def run_infer(prompt: str, img_b64: str, _model: str = model) -> str:  # type: ignore
-            return query_ollama(prompt, img_b64, _model, options=options or {}, system_prompt=system_prompt)
+        def run_infer(prompt: str, img_b64: str, _model: str = model, **kwargs) -> str:  # type: ignore
+            return query_ollama(prompt, img_b64, _model, options=options or {}, system_prompt=system_prompt, **kwargs)
 
     if not fields:
         prompt = pcfg.build_description()
@@ -77,7 +77,7 @@ def process_image(
         }, content, None
     else:
         prompt = pcfg.build_extraction(fields)
-        content = run_infer(prompt, img_base64, model)
+        content = run_infer(prompt, img_base64, model, format="json")
         structured_data: JSONDict = {"filename": filename}
         parsed = extract_structured_data(content, fields)
         structured_data.update(parsed)

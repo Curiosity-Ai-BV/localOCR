@@ -1,52 +1,52 @@
 {
   "0000223278.tif": {
-    "Invoice Number": "I816",
-    "Date": "26.5.82",
-    "Total": "13600.00"
+    "Invoice Number": "N1816",
+    "Date": "26.5.02",
+    "Total": "13,600.00"
   },
   "0001136521.tif": {
-    "Invoice Number": "100142",
-    "Date": "1994-01-12",
-    "Total": "5200.50"
+    "Invoice Number": "AC19",
+    "Date": "APR21/79",
+    "Total": "2797.20"
   },
   "0001139626.tif": {
-    "Invoice Number": "INV-889-1",
-    "Date": "04/05/1998",
-    "Total": "150.00"
+    "Invoice Number": "P-02-093A",
+    "Date": "AUG 1979",
+    "Total": "6266.69"
   },
   "0001139716.tif": {
-    "Invoice Number": "20593A",
-    "Date": "Dec 1, 1999",
-    "Total": "1205.75"
+    "Invoice Number": "V-10-U970",
+    "Date": "OCT 17/79",
+    "Total": "4645.62"
   },
   "0001144288.tif": {
-    "Invoice Number": "44288",
-    "Date": "11/22/1997",
-    "Total": "88.99"
+    "Invoice Number": "KN-PR-7S-20",
+    "Date": "",
+    "Total": "5650.00"
   },
   "0001431487.tif": {
-    "Invoice Number": "1431487-XYZ",
-    "Date": "1996-03-15",
-    "Total": "300.00"
+    "Invoice Number": "M12005",
+    "Date": "January 9",
+    "Total": ""
   },
   "0011500947.tif": {
-    "Invoice Number": "9470",
-    "Date": "2/14/1995",
-    "Total": "99.50"
+    "Invoice Number": "1995-83D",
+    "Date": "August 14, 1995",
+    "Total": "11,780.63"
   },
   "0011899826.tif": {
-    "Invoice Number": "899826",
-    "Date": "1993-08-01",
-    "Total": "450.25"
+    "Invoice Number": "1-9635",
+    "Date": "March 31, 1976",
+    "Total": "1,322.00"
   },
   "0013040651.tif": {
-    "Invoice Number": "0651-INV",
-    "Date": "10/30/1996",
-    "Total": "14.00"
+    "Invoice Number": "11486",
+    "Date": "July 26, 1991",
+    "Total": ""
   },
   "0013043193.tif": {
-    "Invoice Number": "3193",
-    "Date": "1994-11-18",
-    "Total": "718.00"
+    "Invoice Number": "50977",
+    "Date": "November 7, 1988",
+    "Total": "280.08"
   }
 }
