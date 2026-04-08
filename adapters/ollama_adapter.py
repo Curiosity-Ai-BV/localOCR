@@ -137,6 +137,7 @@ def query_ollama(
     *,
     options: Optional[dict] = None,
     system_prompt: Optional[str] = None,
+    format: Optional[str] = None,
 ) -> str:
     """Query Ollama chat with an image, returning content string."""
     messages = []
@@ -145,7 +146,11 @@ def query_ollama(
     messages.append({"role": "user", "content": prompt, "images": [image_base64]})
 
     try:
-        response = ollama.chat(model=model, messages=messages, options=options or {})
+        kwargs = {"model": model, "messages": messages, "options": options or {}}
+        if format:
+            kwargs["format"] = format
+            
+        response = ollama.chat(**kwargs)
         content = response.get("message", {}).get("content", "")
         if not isinstance(content, str):
             raise ModelUnavailable("Unexpected response content type from model")

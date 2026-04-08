@@ -33,7 +33,10 @@ def calculate_accuracy(extracted: str, ground_truth: str) -> bool:
     g_norm = normalize_text(ground_truth)
     if not g_norm:
         return True # If ground truth is empty or missing, skip strict check
-    return g_norm in e_norm or e_norm in g_norm
+    if not e_norm:
+        return False # Failed to extract anything
+    # We only want to be correct if the extracted text contains the full ground truth
+    return g_norm in e_norm
 
 def create_chart(metrics: Dict[str, float], output_path: str):
     fields = list(metrics.keys())
@@ -108,6 +111,27 @@ def generate_mock_results(ground_truth: Dict[str, Dict[str, str]]):
 def main():
     parser = argparse.ArgumentParser(description="Evaluate localOCR against ground truth.")
     parser.add_argument(
+        "--dataset",
+        default="eval_dataset",
+        help="Path to the dataset directory containing images."
+    )
+    parser.add_argument(
+        "--ground-truth",
+        default="ground_truth.json",
+        help="Name of the ground truth file inside the dataset folder."
+    )
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("EVAL_MODEL", "gemma3:12b"),
+        help="Model to use (defaults to EVAL_MODEL env or gemma3:12b)."
+    )
+    parser.add_argument(
+        "--max-images",
+        type=int,
+        default=int(os.environ.get("EVAL_MAX_IMAGES", "0")),
+        help="Max images to evaluate. 0 means all."
+    )
+    parser.add_argument(
         "--allow-mock",
         action="store_true",
         help="Fall back to deterministic mock results if Ollama is not running.",
@@ -119,8 +143,8 @@ def main():
     )
     args = parser.parse_args()
 
-    dataset_dir = "eval_dataset"
-    gt_path = os.path.join(dataset_dir, "ground_truth.json")
+    dataset_dir = args.dataset
+    gt_path = os.path.join(dataset_dir, args.ground_truth)
     chart_path = "eval_results.png"
     
     if not os.path.exists(gt_path):
@@ -131,10 +155,10 @@ def main():
         ground_truth = json.load(f)
         
     fields_to_extract = list(next(iter(ground_truth.values())).keys())
-    model_name = os.environ.get("EVAL_MODEL", "gemma3:12b")
-    max_images = int(os.environ.get("EVAL_MAX_IMAGES", "0"))
+    model_name = args.model
+    max_images = args.max_images
     
-    options = {"temperature": 0.0, "top_p": 1.0, "num_predict": 512, "num_ctx": 4096}
+    options = {"temperature": 0.0, "top_p": 1.0}
     system_prompt = None
     limiter = RateLimiter(None)
     
@@ -169,10 +193,12 @@ def main():
             if structured and len(structured) > 0:
                 all_extracted[filename] = structured[0]
             else:
+                raw_out = r[0].get('extraction') if r else 'None'
+                print(f"Warning: No valid structured data returned for {filename}. Raw Output: {raw_out}")
                 all_extracted[filename] = {}
             count += 1
     else:
-        if not args.allow_mock:
+        if not args.allow_mock and os.environ.get("CI") is None:
             print(
                 "Error: Ollama is not running. Re-run with --allow-mock to use "
                 "deterministic mock data (README will not be updated).",
@@ -181,16 +207,26 @@ def main():
             sys.exit(1)
         all_extracted = generate_mock_results(ground_truth)
 
-    # Compute Metrics
+    # Compute Metrics and detailed results
     field_metrics = {field: {"correct": 0, "total": 0} for field in fields_to_extract}
+    detailed_rows = []
     
     for filename, expected in ground_truth.items():
          extracted = all_extracted.get(filename, {})
          for field, true_val in expected.items():
              field_metrics[field]["total"] += 1
              extracted_val = extracted.get(field, "")
-             if calculate_accuracy(extracted_val, true_val):
+             is_match = calculate_accuracy(extracted_val, true_val)
+             if is_match:
                  field_metrics[field]["correct"] += 1
+             
+             detailed_rows.append({
+                 "Filename": filename,
+                 "Field": field,
+                 "Expected": true_val,
+                 "Extracted": extracted_val,
+                 "Match": str(is_match)
+             })
                  
     final_metrics = {}
     for field, stats in field_metrics.items():
@@ -199,6 +235,17 @@ def main():
         print(f"Accuracy for {field}: {accuracy*100:.1f}%")
         
     create_chart(final_metrics, chart_path)
+    
+    # Save the detailed evaluation results to CSV
+    import csv
+    detailed_csv_path = "eval_detailed_results.csv"
+    with open(detailed_csv_path, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=["Filename", "Field", "Expected", "Extracted", "Match"])
+        writer.writeheader()
+        for row in detailed_rows:
+            writer.writerow(row)
+    print(f"Detailed comparison saved to {detailed_csv_path}")
+
     if not args.no_readme and not args.allow_mock:
         update_readme(final_metrics, chart_path)
     else:

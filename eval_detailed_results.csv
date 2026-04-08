@@ -1,0 +1,31 @@
+Filename,Field,Expected,Extracted,Match
+0000223278.tif,Invoice Number,N1816,N 1816,True
+0000223278.tif,Date,26.5.02,26.5.82,False
+0000223278.tif,Total,"13,600.00","£ 7,355.55",False
+0001136521.tif,Invoice Number,AC19,,False
+0001136521.tif,Date,APR21/79,,False
+0001136521.tif,Total,2797.20,2797.20,True
+0001139626.tif,Invoice Number,P-02-093A,,False
+0001139626.tif,Date,AUG 1979,,False
+0001139626.tif,Total,6266.69,1146.00,False
+0001139716.tif,Invoice Number,V-10-U970,P-10-0970,False
+0001139716.tif,Date,OCT 17/79,11/2/79,False
+0001139716.tif,Total,4645.62,4845.62,False
+0001144288.tif,Invoice Number,KN-PR-7S-20,,False
+0001144288.tif,Date,,"December 28, 1973",True
+0001144288.tif,Total,5650.00,,False
+0001431487.tif,Invoice Number,M12005,M12005,True
+0001431487.tif,Date,January 9,"January 9, 1991",True
+0001431487.tif,Total,,,True
+0011500947.tif,Invoice Number,1995-83D,,False
+0011500947.tif,Date,"August 14, 1995","August 14, 1995",True
+0011500947.tif,Total,"11,780.63","$11,780.63",True
+0011899826.tif,Invoice Number,1-9635,3-228,False
+0011899826.tif,Date,"March 31, 1976","March 31, 1976",True
+0011899826.tif,Total,"1,322.00","$1,322.00",True
+0013040651.tif,Invoice Number,11486,11670,False
+0013040651.tif,Date,"July 26, 1991","July 26, 1991",True
+0013040651.tif,Total,,,True
+0013043193.tif,Invoice Number,50977,15407,False
+0013043193.tif,Date,"November 7, 1988","November 7, 1988",True
+0013043193.tif,Total,280.08,280.08,True
