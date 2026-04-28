@@ -40,7 +40,7 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
     with st.sidebar:
         st.subheader("Files")
         state.uploaded_files = st.file_uploader(
-            "Choose images or PDFs",
+            "Upload images or PDFs",
             accept_multiple_files=True,
             type=["png", "jpg", "jpeg", "pdf"],
         ) or []
@@ -69,7 +69,7 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
             if "gpt-oss" not in str(m).lower()
         ]
         state.selected_model = st.selectbox(
-            "Choose vision model:",
+            "Vision model",
             model_options,
             help="Select which AI model to use for image analysis",
         )
@@ -165,12 +165,13 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
         )
 
         if state.uploaded_files:
-            st.write(f"Uploaded {len(state.uploaded_files)} files")
+            file_label = "file" if len(state.uploaded_files) == 1 else "files"
+            st.caption(f"{len(state.uploaded_files)} {file_label} ready")
             has_pdf = any(f.name.lower().endswith(".pdf") for f in state.uploaded_files)
 
             st.subheader("Extraction")
             state.extraction_mode = st.radio(
-                "Choose extraction mode:",
+                "Extraction mode",
                 ["General description", "Custom field extraction"],
             )
 
@@ -187,13 +188,13 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
 
             if has_pdf:
                 state.pdf_process_mode = st.radio(
-                    "How to process PDF files:",
+                    "PDF processing",
                     get_pdf_mode_options(),
                     key="pdf_process_mode",
                     help=get_pdf_mode_help(),
                 )
 
-            state.process_button = st.button("Run Scan")
+            state.process_button = st.button("Run scan", type="primary", use_container_width=True)
         else:
             st.info("Please upload images or PDF files to analyze")
             state.process_button = False

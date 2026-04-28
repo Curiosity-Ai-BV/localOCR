@@ -1,5 +1,11 @@
 ## 2026-04-28
 
+- Refreshed the Streamlit UI with a shared theme layer, accessible focus states, 44px controls, reduced-motion safeguards, result cards, status badges, and a compact empty state.
+- Polished sidebar wording, setup readiness badges, and the primary scan action while preserving the existing upload, OCR, preview, structured JSON, and export flows.
+- Added focused UI regression tests for theme safeguards and result metadata/status formatting.
+
+## 2026-04-28
+
 - Completed the mypy cleanup for PDF rendering, image resizing, Ollama request payloads, pipeline result metadata, and CLI result modes.
 - Added a `make type` target and wired it into `make check` so CI runs mypy with the existing check workflow.
 - Added `types-requests` to the development dependency set and constraints so evaluation imports are typed reproducibly.

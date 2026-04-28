@@ -18,33 +18,16 @@ from ui.components import (
     render_sidebar,
 )
 from ui.components.setup_status import PDF_PER_PAGE_MODE
+from ui.theme import render_app_theme
 
 st.set_page_config(
     page_title="Curiosity AI Scans",
-    page_icon="🔍",
+    page_icon="assets/gemma3.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.markdown(
-    """
-    <style>
-    :root { --accent: #6C5CE7; }
-    .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1100px; }
-    [data-testid="stSidebar"] { border-right: 1px solid rgba(128,128,128,0.15); }
-    .stButton>button {
-        background: var(--accent); color: #fff; border: 1px solid rgba(0,0,0,0.05);
-        border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 600;
-    }
-    .stButton>button:hover { opacity: .95; }
-    .download-panel {
-        border: 1px dashed rgba(127,127,127,0.25); border-radius: 12px;
-        padding: 0.9rem 1rem; background: rgba(127,127,127,0.06);
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+render_app_theme()
 
 APP_TITLE = "Curiosity AI Scans"
 SETTINGS = Settings.from_env()
@@ -194,8 +177,16 @@ def run_processing(state: SidebarState, results_placeholder) -> None:
 
 # --- Main ------------------------------------------------------------------
 
-st.title(APP_TITLE)
-st.caption("Local, private, minimalist vision scanning")
+st.markdown(
+    f"""
+    <section class="ocr-app-header" aria-label="{APP_TITLE}">
+        <p class="ocr-eyebrow">Local document OCR</p>
+        <h1>{APP_TITLE}</h1>
+        <p>Private scans, structured extraction, and export-ready results from local vision models.</p>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
 
 if not PDF_SUPPORT:
     st.warning("PDF support requires PyMuPDF. Install it with: pip install pymupdf")
@@ -222,14 +213,20 @@ if results_list:
     render_downloads(results_list)
 
 if not state.uploaded_files and not results_list:
-    st.info("Add files on the left to get started")
-    st.caption("Upload images or PDFs, choose a local vision model, then run a scan.")
+    st.markdown(
+        """
+        <div class="ocr-empty-state">
+            <strong>Add files to start</strong>
+            Upload images or PDFs in the sidebar, choose a local model, then run a scan.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-st.markdown("---")
 st.markdown(
     """
-    <div style="text-align: center; margin-top: 20px; opacity: 0.7;">
-        Made with love by Adrian - <a href="https://ad1x.com" target="_blank">ad1x.com</a>
+    <div class="ocr-footer">
+        Curiosity AI Scans by Adrian | <a href="https://ad1x.com" target="_blank">ad1x.com</a>
     </div>
     """,
     unsafe_allow_html=True,

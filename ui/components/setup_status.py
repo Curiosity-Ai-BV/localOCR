@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 from typing import Iterable, List
 
 import streamlit as st
@@ -56,8 +57,20 @@ def build_readiness_items(
 
 
 def render_setup_status(items: Iterable[ReadinessItem]) -> None:
-    st.caption("Setup check")
     labels = {"ready": "Ready", "check": "Check", "action": "Action"}
+    rows = ['<div class="ocr-setup-status" aria-label="Setup check">']
+    rows.append('<p class="ocr-setup-heading">Setup check</p>')
     for item in items:
         badge = labels.get(item.status, "Check")
-        st.markdown(f"**{item.label}** · {badge}  \n{item.detail}")
+        status_class = f"ocr-status-{escape(item.status)}"
+        rows.append(
+            (
+                '<div class="ocr-setup-row">'
+                f'<span class="ocr-setup-label">{escape(item.label)}</span>'
+                f'<span class="ocr-setup-badge {status_class}">{escape(badge)}</span>'
+                f'<span class="ocr-setup-detail">{escape(item.detail)}</span>'
+                "</div>"
+            )
+        )
+    rows.append("</div>")
+    st.markdown("".join(rows), unsafe_allow_html=True)
