@@ -7,8 +7,7 @@ per-invocation by constructing a new Settings instance.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field, replace
-from typing import Optional
+from dataclasses import dataclass, replace
 
 
 def _env_int(name: str, default: int) -> int:

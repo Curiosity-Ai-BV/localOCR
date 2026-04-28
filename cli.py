@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -13,9 +14,9 @@ from adapters.ollama_adapter import query_ollama, resolve_model_name
 from core.errors import OCRError
 from core.export import write_results
 from core.logging import get_logger
-from core.models import Result
+from core.models import Mode, Result
 from core.pdf_utils import PDFNotSupportedError, ensure_pdf_support, iter_pdf_pages
-from core.pipeline import BatchConfig, BatchJob, process_image, run_batch
+from core.pipeline import BatchConfig, process_image, run_batch
 from core.prompts import PromptConfig
 from core.settings import Settings
 from core.templates import load_templates_file  # noqa: F401 (back-compat export)
@@ -99,8 +100,9 @@ def _process_file(
                     "filename": page_name,
                     "description": content if fields is None else result.get("extraction", content),
                 }
-                if isinstance(result.get("duration_sec"), (int, float)):
-                    entry["duration_sec"] = float(result["duration_sec"])
+                duration_sec = result.get("duration_sec")
+                if isinstance(duration_sec, (int, float)):
+                    entry["duration_sec"] = float(duration_sec)
                 results.append(entry)
                 if structured_data and len(structured_data) > 1:
                     structured.append(structured_data)
@@ -165,13 +167,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--out-jsonl", default="", help="Optional path to write results as JSONL")
     p.add_argument("--max-concurrency", type=int, default=settings.max_concurrency)
     p.add_argument("--rate-limit", type=float, default=0.0, help="Requests per second (0 = unlimited)")
+    p.add_argument("--json", action="store_true", help="Print one machine-readable JSON summary to stdout")
+    p.add_argument("--quiet", action="store_true", help="Suppress human progress output")
 
     args = p.parse_args(argv)
 
-    files = [f for f in args.files if os.path.exists(f)]
-    if not files:
-        print("No valid files provided.", file=sys.stderr)
-        return 2
+    run_settings = settings.merged(
+        max_image_size=args.max_image_size,
+        jpeg_quality=args.jpeg_quality,
+        pdf_scale=args.pdf_scale,
+    )
 
     options = {
         "temperature": float(args.temperature),
@@ -185,62 +190,84 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             prompts = PromptConfig.from_file(args.templates)
         except Exception as e:
-            print(f"[!] Failed to load templates: {e}")
+            print(f"[!] Failed to load templates: {e}", file=sys.stderr)
 
     fields = None
     if args.mode == "extract":
         if args.schema:
             try:
-                import json
                 with open(args.schema, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 fields = [str(x) for x in data.get("fields", []) if str(x).strip()]
             except Exception as e:
-                print(f"[!] Failed to load schema: {e}")
+                print(f"[!] Failed to load schema: {e}", file=sys.stderr)
         if not fields:
             fields = [s.strip() for s in args.fields.split(",") if s.strip()]
     system_prompt = args.system_prompt or None
+    mode: Mode = "extract" if fields else "describe"
 
-    available, resolved_model, note = resolve_model_name(args.model)
-    if note:
-        print(f"[!] {note}")
-    if not available:
-        print(f"[i] Could not confirm model '{args.model}'. Attempting anyway.")
-
-    limiter = RateLimiter(args.rate_limit if args.rate_limit > 0 else None)
-    inference = _make_inference(options, system_prompt, limiter)
-
-    run_settings = settings.merged(
-        max_image_size=args.max_image_size,
-        jpeg_quality=args.jpeg_quality,
-        pdf_scale=args.pdf_scale,
-    )
-    cfg = BatchConfig(
-        model=resolved_model,
-        fields=fields,
-        system_prompt=system_prompt,
-        options=options,
-        settings=run_settings,
-        prompts=prompts,
-        pdf_pages_separately=args.pdf_pages,
-        inference=inference,
-    )
-
-    all_results: List[Result] = []
+    ordered_results: List[List[Result]] = [[] for _ in args.files]
+    valid_inputs: List[Tuple[int, str]] = []
+    for index, path in enumerate(args.files):
+        if os.path.exists(path):
+            valid_inputs.append((index, path))
+        else:
+            ordered_results[index] = [
+                Result(
+                    source=os.path.basename(path),
+                    mode=mode,
+                    text="",
+                    error=f"Input file not found: {path}",
+                )
+            ]
 
     start = time.perf_counter()
-    if args.max_concurrency <= 1:
-        for r in run_batch(files, cfg):
-            all_results.append(r)
-    else:
-        # Preserve per-file ordering semantics by submitting each file as one job.
-        with ThreadPoolExecutor(max_workers=args.max_concurrency) as ex:
-            futs = [ex.submit(lambda f=fpath: list(run_batch([f], cfg))) for fpath in files]
-            for fut in as_completed(futs):
-                all_results.extend(fut.result())
+    if valid_inputs:
+        available, resolved_model, note = resolve_model_name(args.model, settings=run_settings)
+        if note and not args.quiet and not args.json:
+            print(f"[!] {note}")
+        if not available and not args.quiet and not args.json:
+            print(f"[i] Could not confirm model '{args.model}'. Attempting anyway.")
+
+        limiter = RateLimiter(args.rate_limit if args.rate_limit > 0 else None)
+        inference = _make_inference(options, system_prompt, limiter)
+
+        cfg = BatchConfig(
+            model=resolved_model,
+            fields=fields,
+            system_prompt=system_prompt,
+            options=options,
+            settings=run_settings,
+            prompts=prompts,
+            pdf_pages_separately=args.pdf_pages,
+            inference=inference,
+        )
+
+        if args.max_concurrency <= 1:
+            for index, path in valid_inputs:
+                ordered_results[index] = list(run_batch([path], cfg))
+        else:
+            # Preserve per-file ordering semantics by submitting each file as one job.
+            def _run_one(fpath: str) -> List[Result]:
+                return list(run_batch([fpath], cfg))
+
+            with ThreadPoolExecutor(max_workers=args.max_concurrency) as ex:
+                futs = {
+                    ex.submit(_run_one, fpath): index
+                    for index, fpath in valid_inputs
+                }
+                for fut in as_completed(futs):
+                    ordered_results[futs[fut]] = fut.result()
+
+    all_results = [
+        result
+        for result_group in ordered_results
+        for result in result_group
+    ]
 
     elapsed = time.perf_counter() - start
-    print(f"Processed {len(files)} file(s) in {elapsed:.2f}s")
+    if not args.quiet and not args.json:
+        print(f"Processed {len(args.files)} file(s) in {elapsed:.2f}s")
 
     write_results(all_results, args.out_results, format="csv")
     structured_any = any(r.fields for r in all_results)
@@ -251,8 +278,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.out_jsonl:
         write_results(all_results, args.out_jsonl, format="jsonl")
         wrote.append(args.out_jsonl)
-    print("Wrote: " + ", ".join(wrote))
+    if args.json:
+        payload = {
+            "ok": not any(r.error for r in all_results),
+            "processed_files": len(args.files),
+            "total_results": len(all_results),
+            "results": [
+                {
+                    "source": r.source,
+                    "mode": r.mode,
+                    "text": r.text,
+                    "fields": r.fields,
+                    "error": r.error,
+                    "latency_ms": r.latency_ms,
+                }
+                for r in all_results
+            ],
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+    elif not args.quiet:
+        print("Wrote: " + ", ".join(wrote))
 
+    has_errors = any(r.error for r in all_results)
+    if not valid_inputs and has_errors:
+        return 1
+    if args.json and has_errors:
+        return 1
     return 0
 
 

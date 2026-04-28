@@ -46,7 +46,7 @@ def iter_pdf_pages(file_bytes: bytes, *, scale: float = 1.0) -> Generator[Tuple[
             pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))  # type: ignore[attr-defined]
             if pix.alpha:  # drop alpha channel to keep downstream JPEG encoding simple
                 pix = fitz.Pixmap(fitz.csRGB, pix)  # type: ignore[attr-defined]
-            image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
             yield page_index, total_pages, image
     finally:
         doc.close()

@@ -12,7 +12,7 @@ A streamlined Streamlit app that uses local AI vision models (via Ollama) to ana
 - Central `Settings` dataclass with environment‑variable overrides (`LOCALOCR_*`)
 - Hardened Ollama adapter: exact‑match model resolution, TTL‑cached model listing, typed errors (`ModelUnavailable`, `ParseError`, `PDFError`), and streaming support
 - Structured logging via `core/logging.py`
-- Per‑file status chips (queued/running/done/error) in the Streamlit UI
+- Per‑file status chips (done/error) in the Streamlit UI
 - Session‑isolated results in Streamlit (safe for shared deployments)
 - Robust JSON extraction from model outputs (fenced blocks, brace scanning, heuristics)
 - Advanced model options in the sidebar (temperature, top‑p, max tokens, context length)
@@ -27,7 +27,7 @@ A streamlined Streamlit app that uses local AI vision models (via Ollama) to ana
 - Process PDF files page-by-page or as a single document
 - Export results as standard CSV and structured CSV (for extraction mode)
 
-The app uses Streamlit for the interface, Ollama for local model serving, Pillow for image processing, and PyMuPDF for PDF pages. Everything remains in a single file for simplicity while meeting high code-quality standards.
+The app uses Streamlit for the interface, Ollama for local model serving, Pillow for image processing, and PyMuPDF for PDF pages. The runtime is split into focused modules for the UI, CLI, processing pipeline, exports, settings, and Ollama adapter.
 
 ## Installation and setup
 
@@ -75,7 +75,7 @@ Pull one or more — the app works with whichever you have installed.
 
 ### Step 3: Python environment
 
-Use Python 3.9–3.12 for best compatibility.
+Use Python 3.10–3.13 for best compatibility with the current dependency set.
 
 ```bash
 # Create a virtual environment
@@ -90,8 +90,22 @@ venv\Scripts\Activate.ps1
 venv\Scripts\activate.bat
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -c constraints.txt -r requirements.txt
 ```
+
+For contribution work, install the development tools with the same constraints
+file so local checks match CI:
+
+```bash
+pip install -c constraints.txt -r requirements-dev.txt
+make check
+```
+
+`constraints.txt` pins the verified runtime, development, and stable transitive
+dependency set. Python-specific compiled transitive packages are resolved per
+interpreter. CI installs through this file on Python 3.10, 3.11, 3.12, and 3.13
+before running `make check`; the Ollama-backed evaluation runs only once on
+Python 3.11 to keep the workflow practical.
 
 ## Running the application
 
@@ -176,7 +190,7 @@ The app follows a minimalist, contemporary design that emphasizes clarity and pr
 - JSON details shown inside a collapsible expander to reduce noise
 - Optional compact mode and ability to hide thumbnails
 
-See design.md for the full design language.
+Keep UI changes aligned with this design language so the scanning flow stays compact and easy to operate.
 
 ## Project structure
 
@@ -223,12 +237,12 @@ Open the “Advanced Model Options” expander in the sidebar to configure:
 - Ollama not running: start with `ollama serve`
 - Model not found: pull it with `ollama pull <model_name>`. The app tries to detect installed models and will proceed even if it can’t confirm; failures will include a concrete error message.
 - PDF support missing: install PyMuPDF — `pip install pymupdf`
-- Python compatibility: prefer Python 3.9–3.12
+- Python compatibility: prefer Python 3.10–3.13
 - Long or complex prompts: if hitting context limits, increase `num_ctx`
 
 ---
 
-Made with ❤️ by Adrian — [ad1x.com](https://ad1x.com)
+Made with ❤️ by Adrian — [curiosityai.nl](https://curiosityai.nl)
 
 ## Automated Evaluation Results
 

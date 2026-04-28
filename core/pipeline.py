@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
+from inspect import Parameter, signature
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
 
 from PIL import Image
@@ -18,14 +19,53 @@ from core.image_utils import (
 )
 from core.json_extract import extract_structured_data
 from core.logging import get_logger
-from core.models import Result
+from core.models import Mode, Result
 from core.pdf_utils import PDFNotSupportedError, ensure_pdf_support, iter_pdf_pages
 from core.prompts import PromptConfig
 from core.settings import Settings
 
 JSONDict = Dict[str, object]
+PDFPageResult = Tuple[
+    Optional[int],
+    Optional[int],
+    Optional[Image.Image],
+    str,
+    str,
+    Optional[JSONDict],
+    Optional[float],
+    Optional[Tuple[int, int]],
+    Optional[int],
+]
 
 _log = get_logger("pipeline")
+
+
+def _accepts_kwarg(func: Callable[..., str], name: str) -> bool:
+    try:
+        sig = signature(func)
+    except (TypeError, ValueError):
+        return True
+    for param in sig.parameters.values():
+        if param.kind is Parameter.VAR_KEYWORD:
+            return True
+        if param.name == name and param.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY):
+            return True
+    return False
+
+
+def _call_inference(
+    func: Callable[..., str],
+    prompt: str,
+    image_base64: str,
+    model: str,
+    **kwargs: Any,
+) -> str:
+    supported_kwargs = {
+        name: value
+        for name, value in kwargs.items()
+        if _accepts_kwarg(func, name)
+    }
+    return func(prompt, image_base64, model, **supported_kwargs)
 
 
 def _resolve_prompts(prompts: Optional[PromptConfig]) -> PromptConfig:
@@ -34,6 +74,26 @@ def _resolve_prompts(prompts: Optional[PromptConfig]) -> PromptConfig:
     # Honour legacy module-global templates for back-compat.
     from core.templates import current_prompt_config
     return current_prompt_config()
+
+
+def _number_as_float(value: object) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _int_value(value: object) -> Optional[int]:
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _dimensions_from_result(result: JSONDict) -> Optional[Tuple[int, int]]:
+    width = result.get("input_width")
+    height = result.get("input_height")
+    if isinstance(width, int) and isinstance(height, int):
+        return (width, height)
+    return None
 
 
 def process_image(
@@ -48,6 +108,7 @@ def process_image(
     jpeg_quality: int = DEFAULT_JPEG_QUALITY,
     inference: Optional[Callable[[str, str, str], str]] = None,
     prompts: Optional[PromptConfig] = None,
+    settings: Optional[Settings] = None,
 ) -> Tuple[JSONDict, str, Optional[JSONDict]]:
     """Process a single image with optional field extraction.
 
@@ -61,11 +122,18 @@ def process_image(
     run_infer = inference
     if run_infer is None:
         def run_infer(prompt: str, img_b64: str, _model: str = model, **kwargs) -> str:  # type: ignore
-            return query_ollama(prompt, img_b64, _model, options=options or {}, system_prompt=system_prompt, **kwargs)
+            return query_ollama(
+                prompt,
+                img_b64,
+                _model,
+                options=options or {},
+                system_prompt=system_prompt,
+                **kwargs,
+            )
 
     if not fields:
         prompt = pcfg.build_description()
-        content = run_infer(prompt, img_base64, model)
+        content = _call_inference(run_infer, prompt, img_base64, model, settings=settings)
         elapsed = time.perf_counter() - t0
         return {
             "filename": filename,
@@ -77,7 +145,7 @@ def process_image(
         }, content, None
     else:
         prompt = pcfg.build_extraction(fields)
-        content = run_infer(prompt, img_base64, model, format="json")
+        content = _call_inference(run_infer, prompt, img_base64, model, format="json", settings=settings)
         structured_data: JSONDict = {"filename": filename}
         parsed = extract_structured_data(content, fields)
         structured_data.update(parsed)
@@ -106,21 +174,8 @@ def process_pdf(
     pdf_scale: float,
     inference: Optional[Callable[[str, str, str], str]] = None,
     prompts: Optional[PromptConfig] = None,
-) -> Generator[
-    Tuple[
-        Optional[int],
-        Optional[int],
-        Optional[Image.Image],
-        str,
-        str,
-        Optional[JSONDict],
-        Optional[float],
-        Optional[Tuple[int, int]],
-        Optional[int],
-    ],
-    None,
-    None,
-]:
+    settings: Optional[Settings] = None,
+) -> Generator[PDFPageResult, None, None]:
     """Process a PDF file using PyMuPDF, yielding page-level results."""
     try:
         ensure_pdf_support()
@@ -138,10 +193,11 @@ def process_pdf(
                     jpeg_quality=jpeg_quality,
                     inference=inference,
                     prompts=prompts,
+                    settings=settings,
                 )
-                elapsed = result.get("duration_sec") if isinstance(result, dict) else None
-                dims = (result.get("input_width"), result.get("input_height")) if isinstance(result, dict) else None
-                size_bytes = result.get("encoded_bytes") if isinstance(result, dict) else None
+                elapsed = _number_as_float(result.get("duration_sec"))
+                dims = _dimensions_from_result(result)
+                size_bytes = _int_value(result.get("encoded_bytes"))
                 yield page_num, page_count, img, page_filename, content, structured_data, elapsed, dims, size_bytes
         else:
             first = next(iter_pdf_pages(file_bytes, scale=pdf_scale), None)
@@ -159,15 +215,16 @@ def process_pdf(
                 jpeg_quality=jpeg_quality,
                 inference=inference,
                 prompts=prompts,
+                settings=settings,
             )
-            elapsed = result.get("duration_sec") if isinstance(result, dict) else None
-            dims = (result.get("input_width"), result.get("input_height")) if isinstance(result, dict) else None
-            size_bytes = result.get("encoded_bytes") if isinstance(result, dict) else None
+            elapsed = _number_as_float(result.get("duration_sec"))
+            dims = _dimensions_from_result(result)
+            size_bytes = _int_value(result.get("encoded_bytes"))
             yield 0, page_count, img, filename, content, structured_data, elapsed, dims, size_bytes
     except PDFNotSupportedError as e:
         yield None, None, None, filename, str(e), None, None, None, None
     except Exception as e:
-        _log.exception("pdf_processing_failed", extra={"filename": filename})
+        _log.exception("pdf_processing_failed", extra={"source": filename})
         yield None, None, None, filename, f"Error processing PDF: {str(e)}", None, None, None, None
 
 
@@ -225,7 +282,7 @@ def run_batch(
     This is the canonical entry point used by both the CLI and the Streamlit
     UI so they share a single execution path.
     """
-    mode = "extract" if cfg.fields else "describe"
+    mode: Mode = "extract" if cfg.fields else "describe"
     for raw_job in jobs:
         job = _job_from_path(raw_job) if isinstance(raw_job, str) else raw_job
         try:
@@ -244,6 +301,7 @@ def run_batch(
                     pdf_scale=cfg.settings.pdf_scale,
                     inference=cfg.inference,
                     prompts=cfg.prompts,
+                    settings=cfg.settings,
                 ):
                     page_num, page_count, image, page_filename, content, structured, elapsed, dims, size_bytes = page_info
                     if page_num is None:
@@ -266,7 +324,7 @@ def run_batch(
                         page=page_num,
                         page_count=page_count,
                         latency_ms=int((elapsed or 0.0) * 1000),
-                        dimensions=tuple(dims) if dims and len(dims) == 2 else None,  # type: ignore[arg-type]
+                        dimensions=dims,
                         encoded_bytes=size_bytes,
                         preview_image_bytes=image_to_png_bytes(image) if image is not None else None,
                     )
@@ -283,17 +341,14 @@ def run_batch(
                     jpeg_quality=cfg.settings.jpeg_quality,
                     inference=cfg.inference,
                     prompts=cfg.prompts,
+                    settings=cfg.settings,
                 )
                 clean_fields = {}
                 if structured:
                     clean_fields = {k: v for k, v in structured.items() if k != "filename"}
-                elapsed_sec = float(result.get("duration_sec", 0.0)) if isinstance(result, dict) else 0.0
-                dims_t: Optional[Tuple[int, int]] = None
-                if isinstance(result, dict):
-                    w = result.get("input_width")
-                    h = result.get("input_height")
-                    if isinstance(w, int) and isinstance(h, int):
-                        dims_t = (w, h)
+                elapsed_sec = _number_as_float(result.get("duration_sec")) or 0.0
+                dims_t = _dimensions_from_result(result)
+                encoded_bytes = _int_value(result.get("encoded_bytes"))
                 yield Result(
                     source=job.source,
                     mode=mode,
@@ -302,7 +357,7 @@ def run_batch(
                     fields=clean_fields,
                     latency_ms=int(elapsed_sec * 1000),
                     dimensions=dims_t,
-                    encoded_bytes=result.get("encoded_bytes") if isinstance(result, dict) else None,
+                    encoded_bytes=encoded_bytes,
                     preview_image_bytes=image_to_png_bytes(job.data),
                 )
         except Exception as e:

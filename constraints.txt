@@ -1,0 +1,69 @@
+# Verified dependency constraints for reproducible installs.
+#
+# Generated from the local verified environment on 2026-04-28 using
+# Python 3.13.11, then resolver-checked for Python 3.10-3.13. Keep this
+# file aligned with requirements.txt and requirements-dev.txt whenever
+# dependency floors change. Python-specific compiled transitive packages such
+# as numpy, pandas, and contourpy are intentionally resolved per interpreter.
+altair==6.1.0
+annotated-types==0.7.0
+anyio==4.13.0
+attrs==26.1.0
+blinker==1.9.0
+cachetools==7.0.6
+certifi==2026.4.22
+charset-normalizer==3.4.7
+click==8.3.3
+coverage==7.13.5
+cycler==0.12.1
+fonttools==4.62.1
+gitdb==4.0.12
+GitPython==3.1.48
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.13
+iniconfig==2.3.0
+Jinja2==3.1.6
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+kiwisolver==1.5.0
+librt==0.9.0
+MarkupSafe==3.0.3
+matplotlib==3.10.9
+mypy==1.20.2
+mypy_extensions==1.1.0
+narwhals==2.20.0
+ollama==0.6.1
+packaging==26.2
+pathspec==1.1.1
+pillow==12.2.0
+pluggy==1.6.0
+protobuf==7.34.1
+pyarrow==24.0.0
+pydantic==2.13.3
+pydantic_core==2.46.3
+pydeck==0.9.2
+Pygments==2.20.0
+PyMuPDF==1.27.2.3
+pyparsing==3.3.2
+pytest==9.0.3
+pytest-cov==7.1.0
+python-dateutil==2.9.0.post0
+pytz==2026.1.post1
+referencing==0.37.0
+requests==2.33.1
+rpds-py==0.30.0
+ruff==0.15.12
+six==1.17.0
+smmap==5.0.3
+sniffio==1.3.1
+streamlit==1.56.0
+tenacity==9.1.4
+toml==0.10.2
+tornado==6.5.5
+typing-inspection==0.4.2
+types-requests==2.33.0.20260408
+typing_extensions==4.15.0
+tzdata==2026.2
+urllib3==2.6.3

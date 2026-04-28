@@ -1,5 +1,3 @@
-import io
-
 import pytest
 from PIL import Image
 
@@ -69,6 +67,37 @@ def test_process_pdf_per_page_with_extraction():
     page_num, page_count, image, page_filename, content, structured_data, elapsed_sec, dims, size_bytes = next(gen)
     assert structured_data is not None
     assert structured_data.get("Invoice number") == "X-1"
+
+
+def test_process_pdf_inference_error_returns_error_result():
+    def failing_infer(prompt: str, img_b64: str, model: str) -> str:
+        raise RuntimeError("vision backend failed")
+
+    pdf_bytes = make_pdf_bytes()
+    gen = process_pdf(
+        pdf_bytes,
+        "sample.pdf",
+        fields=None,
+        process_pages_separately=True,
+        model="dummy",
+        system_prompt=None,
+        options={},
+        max_image_size=512,
+        jpeg_quality=80,
+        pdf_scale=1.0,
+        inference=failing_infer,
+    )
+
+    page_num, page_count, image, page_filename, content, structured_data, elapsed_sec, dims, size_bytes = next(gen)
+    assert page_num is None
+    assert page_count is None
+    assert image is None
+    assert page_filename == "sample.pdf"
+    assert "vision backend failed" in content
+    assert structured_data is None
+    assert elapsed_sec is None
+    assert dims is None
+    assert size_bytes is None
 
 
 def test_iter_pdf_pages_returns_images():

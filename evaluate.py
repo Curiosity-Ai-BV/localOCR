@@ -18,7 +18,7 @@ def is_ollama_running():
     try:
         requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
         return True
-    except:
+    except Exception:
         return False
 
 def normalize_text(text: Any) -> str:

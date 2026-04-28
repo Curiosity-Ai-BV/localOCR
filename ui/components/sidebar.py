@@ -7,9 +7,16 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
-from adapters.ollama_adapter import get_available_models
+from adapters.ollama_adapter import get_available_models, list_models_with_status
 from core.prompts import PromptConfig
 from core.settings import Settings
+from .setup_status import (
+    PDF_PER_PAGE_MODE,
+    build_readiness_items,
+    get_pdf_mode_help,
+    get_pdf_mode_options,
+    render_setup_status,
+)
 
 
 @dataclass
@@ -22,18 +29,28 @@ class SidebarState:
     prompts: PromptConfig = field(default_factory=PromptConfig)
     fields: Optional[List[str]] = None
     extraction_mode: str = "General description"
-    pdf_process_mode: str = "Process each page separately"
+    pdf_process_mode: str = PDF_PER_PAGE_MODE
     show_images: bool = True
     compact_view: bool = False
     process_button: bool = False
 
 
-def render_sidebar(base_settings: Settings) -> SidebarState:
+def _load_local_model_inventory(base_settings: Settings) -> tuple[List[str], bool]:
+    inventory = list_models_with_status(settings=base_settings)
+    model_names = [
+        str(model.get("name") or model.get("model") or "")
+        for model in inventory.models
+        if model.get("name") or model.get("model")
+    ]
+    return model_names, inventory.reachable
+
+
+def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> SidebarState:
     state = SidebarState(settings=base_settings)
     with st.sidebar:
         st.subheader("Files")
         state.uploaded_files = st.file_uploader(
-            "Choose images or PDFs",
+            "Upload images or PDFs",
             accept_multiple_files=True,
             type=["png", "jpg", "jpeg", "pdf"],
         ) or []
@@ -52,14 +69,23 @@ def render_sidebar(base_settings: Settings) -> SidebarState:
             "deepseek-ocr",
             "MHKetbi/Unsloth_gemma3-12b-it:latest",
         ]
+        local_models, ollama_available = _load_local_model_inventory(base_settings)
         model_options = [
-            m for m in get_available_models(default_models)
+            m for m in get_available_models(default_models, settings=base_settings)
             if "gpt-oss" not in str(m).lower()
         ]
         state.selected_model = st.selectbox(
-            "Choose vision model:",
+            "Vision model",
             model_options,
             help="Select which AI model to use for image analysis",
+        )
+        render_setup_status(
+            build_readiness_items(
+                ollama_available=ollama_available,
+                model_names=local_models,
+                selected_model=state.selected_model,
+                pdf_supported=pdf_supported,
+            )
         )
 
         with st.expander("Advanced Model Options", expanded=False):
@@ -145,12 +171,13 @@ def render_sidebar(base_settings: Settings) -> SidebarState:
         )
 
         if state.uploaded_files:
-            st.write(f"Uploaded {len(state.uploaded_files)} files")
+            file_label = "file" if len(state.uploaded_files) == 1 else "files"
+            st.caption(f"{len(state.uploaded_files)} {file_label} ready")
             has_pdf = any(f.name.lower().endswith(".pdf") for f in state.uploaded_files)
 
             st.subheader("Extraction")
             state.extraction_mode = st.radio(
-                "Choose extraction mode:",
+                "Extraction mode",
                 ["General description", "Custom field extraction"],
             )
 
@@ -167,13 +194,13 @@ def render_sidebar(base_settings: Settings) -> SidebarState:
 
             if has_pdf:
                 state.pdf_process_mode = st.radio(
-                    "How to process PDF files:",
-                    ["Process each page separately", "Process entire PDF as one document"],
+                    "PDF processing",
+                    get_pdf_mode_options(),
                     key="pdf_process_mode",
-                    help="Choose whether to run OCR on every page or treat the PDF as a single document.",
+                    help=get_pdf_mode_help(),
                 )
 
-            state.process_button = st.button("Run Scan")
+            state.process_button = st.button("Run scan", type="primary", use_container_width=True)
         else:
             st.info("Please upload images or PDF files to analyze")
             state.process_button = False

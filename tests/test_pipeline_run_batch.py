@@ -1,6 +1,3 @@
-import io
-
-import pytest
 from PIL import Image
 
 from core.models import Result
@@ -76,6 +73,25 @@ def test_run_batch_uses_prompt_config():
     jobs = [BatchJob(source="x.png", data=_img(), kind="image")]
     list(run_batch(jobs, cfg))
     assert seen["prompt"] == "CUSTOM_PROMPT_MARKER"
+
+
+def test_run_batch_passes_settings_to_default_inference(monkeypatch):
+    seen = {}
+
+    def fake_query(prompt, img_b64, model, **kwargs):
+        seen["settings"] = kwargs.get("settings")
+        return "ok"
+
+    monkeypatch.setattr("core.pipeline.query_ollama", fake_query)
+
+    settings = Settings(request_timeout=7.0)
+    cfg = BatchConfig(model="fake", settings=settings)
+    jobs = [BatchJob(source="x.png", data=_img(), kind="image")]
+
+    results = list(run_batch(jobs, cfg))
+
+    assert results[0].text == "ok"
+    assert seen["settings"] is settings
 
 
 def test_run_batch_keeps_pdf_preview_bytes(monkeypatch):

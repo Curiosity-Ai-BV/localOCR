@@ -1,4 +1,4 @@
-streamlit>=1.0.0
-ollama>=0.1.0
-pillow>=9.0.0
-PyMuPDF>=1.19.0
+streamlit>=1.56.0
+ollama>=0.6.1
+pillow>=12.2.0
+PyMuPDF>=1.27.2.3

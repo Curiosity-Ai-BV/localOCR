@@ -23,3 +23,6 @@ Place new unit tests in `tests/`, mirroring the module under test (`test_json_ex
 
 ## Commit & Pull Request Guidelines
 Match the existing history by writing imperative, concise subject lines (e.g., “Add PDF scale control”). Include contextual details in the body when touching multiple modules. Reference related issues and add screenshots or CLI transcripts when UI or output changes. PRs should summarize intent, list validation steps (`pytest`, manual Streamlit run), and call out any Ollama model prerequisites so reviewers can reproduce results quickly.
+
+## Add session logs with the made improvements
+After each session of changes append a overview of the changes at the top of the @Updates.md document, with the Date of the changes

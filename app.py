@@ -1,37 +1,10 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import streamlit as st
 from PIL import Image
-
-st.set_page_config(
-    page_title="Curiosity AI Scans",
-    page_icon="🔍",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-st.markdown(
-    """
-    <style>
-    :root { --accent: #6C5CE7; }
-    .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1100px; }
-    [data-testid="stSidebar"] { border-right: 1px solid rgba(128,128,128,0.15); }
-    .stButton>button {
-        background: var(--accent); color: #fff; border: 1px solid rgba(0,0,0,0.05);
-        border-radius: 10px; padding: 0.5rem 0.9rem; font-weight: 600;
-    }
-    .stButton>button:hover { opacity: .95; }
-    .download-panel {
-        border: 1px dashed rgba(127,127,127,0.25); border-radius: 12px;
-        padding: 0.9rem 1rem; background: rgba(127,127,127,0.06);
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 from adapters.ollama_adapter import resolve_model_name
 from core.models import Result
@@ -44,6 +17,17 @@ from ui.components import (
     render_results,
     render_sidebar,
 )
+from ui.components.setup_status import PDF_PER_PAGE_MODE
+from ui.theme import render_app_theme
+
+st.set_page_config(
+    page_title="Curiosity AI Scans",
+    page_icon="assets/gemma3.png",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+render_app_theme()
 
 APP_TITLE = "Curiosity AI Scans"
 SETTINGS = Settings.from_env()
@@ -95,7 +79,7 @@ def _count_items(uploaded_files, pdf_process_mode: str) -> int:
         file_bytes = uf.read()
         uf.seek(0)
         if uf.name.lower().endswith(".pdf") and PDF_SUPPORT:
-            if pdf_process_mode == "Process each page separately":
+            if pdf_process_mode == PDF_PER_PAGE_MODE:
                 try:
                     total += get_pdf_page_count(file_bytes)
                 except Exception:
@@ -114,7 +98,7 @@ def run_processing(state: SidebarState, results_placeholder) -> None:
     _set_state("results", [])
     _set_state("display_entries", [])
 
-    available, resolved_model, note = resolve_model_name(state.selected_model)
+    available, resolved_model, note = resolve_model_name(state.selected_model, settings=state.settings)
     if note:
         st.warning(note)
     if not available:
@@ -136,7 +120,7 @@ def run_processing(state: SidebarState, results_placeholder) -> None:
         options=state.options,
         settings=state.settings,
         prompts=state.prompts,
-        pdf_pages_separately=(state.pdf_process_mode == "Process each page separately"),
+        pdf_pages_separately=(state.pdf_process_mode == PDF_PER_PAGE_MODE),
     )
 
     results_list: List[Result] = _get_state("results", [])
@@ -193,8 +177,16 @@ def run_processing(state: SidebarState, results_placeholder) -> None:
 
 # --- Main ------------------------------------------------------------------
 
-st.title(APP_TITLE)
-st.caption("Local, private, minimalist vision scanning")
+st.markdown(
+    f"""
+    <section class="ocr-app-header" aria-label="{APP_TITLE}">
+        <p class="ocr-eyebrow">Local document OCR</p>
+        <h1>{APP_TITLE}</h1>
+        <p>Private scans, structured extraction, and export-ready results from local vision models.</p>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
 
 if not PDF_SUPPORT:
     st.warning("PDF support requires PyMuPDF. Install it with: pip install pymupdf")
@@ -202,7 +194,7 @@ if not PDF_SUPPORT:
 _get_state("results", [])
 _get_state("display_entries", [])
 
-state = render_sidebar(SETTINGS)
+state = render_sidebar(SETTINGS, pdf_supported=PDF_SUPPORT)
 
 results_placeholder = st.empty()
 
@@ -221,26 +213,20 @@ if results_list:
     render_downloads(results_list)
 
 if not state.uploaded_files and not results_list:
-    st.info("Add files on the left to get started")
-    st.write(
+    st.markdown(
         """
-    ## How to use this app:
-    1. Upload one or more images or PDF files using the sidebar on the left
-    2. Select which vision model to use for analysis
-    3. Choose between general description or custom field extraction
-    4. If using custom extraction, specify the fields you want to extract
-    5. For PDFs, choose whether to process each page separately or the entire document
-    6. Click 'Run Scan' to analyze them
-    7. View the results for each image or PDF page
-    8. Download results as a CSV file
-    """
+        <div class="ocr-empty-state">
+            <strong>Add files to start</strong>
+            Upload images or PDFs in the sidebar, choose a local model, then run a scan.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-st.markdown("---")
 st.markdown(
     """
-    <div style="text-align: center; margin-top: 20px; opacity: 0.7;">
-        Made with love by Adrian - <a href="https://ad1x.com" target="_blank">ad1x.com</a>
+    <div class="ocr-footer">
+        Curiosity AI Scans by Adrian | <a href="https://curiosityai.nl" target="_blank">curiosityai.nl</a>
     </div>
     """,
     unsafe_allow_html=True,
