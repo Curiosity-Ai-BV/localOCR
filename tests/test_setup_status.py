@@ -1,3 +1,7 @@
+from types import SimpleNamespace
+
+from core.settings import Settings
+import ui.components.sidebar as sidebar
 from ui.components.setup_status import (
     PDF_FIRST_PAGE_MODE,
     PDF_PER_PAGE_MODE,
@@ -33,3 +37,16 @@ def test_readiness_items_summarize_runtime_without_long_instructions():
     assert items[1].detail == "2 local models"
     assert items[2].status == "ready"
     assert items[2].detail == "Available"
+
+
+def test_sidebar_model_inventory_keeps_empty_success_reachable(monkeypatch):
+    monkeypatch.setattr(
+        sidebar,
+        "list_models_with_status",
+        lambda *, settings: SimpleNamespace(models=[], reachable=True),
+    )
+
+    model_names, ollama_available = sidebar._load_local_model_inventory(Settings())
+
+    assert model_names == []
+    assert ollama_available is True

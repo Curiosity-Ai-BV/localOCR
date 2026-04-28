@@ -1,5 +1,11 @@
 ## 2026-04-28
 
+- Kept CLI `--json` stdout parseable when `--quiet` is omitted by suppressing human progress/model-status lines in JSON mode.
+- Added an Ollama model inventory status path so the sidebar can distinguish "Ollama reachable with no local models" from "Ollama not reachable".
+- Added focused regressions for non-quiet JSON output, Ollama empty-list reachability, and sidebar setup inventory wiring.
+
+## 2026-04-28
+
 - Refreshed the Streamlit UI with a shared theme layer, accessible focus states, 44px controls, reduced-motion safeguards, result cards, status badges, and a compact empty state.
 - Polished sidebar wording, setup readiness badges, and the primary scan action while preserving the existing upload, OCR, preview, structured JSON, and export flows.
 - Added focused UI regression tests for theme safeguards and result metadata/status formatting.

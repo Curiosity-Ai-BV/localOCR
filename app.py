@@ -226,7 +226,7 @@ if not state.uploaded_files and not results_list:
 st.markdown(
     """
     <div class="ocr-footer">
-        Curiosity AI Scans by Adrian | <a href="https://ad1x.com" target="_blank">ad1x.com</a>
+        Curiosity AI Scans by Adrian | <a href="https://curiosityai.nl" target="_blank">curiosityai.nl</a>
     </div>
     """,
     unsafe_allow_html=True,

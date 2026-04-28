@@ -242,7 +242,7 @@ Open the “Advanced Model Options” expander in the sidebar to configure:
 
 ---
 
-Made with ❤️ by Adrian — [ad1x.com](https://ad1x.com)
+Made with ❤️ by Adrian — [curiosityai.nl](https://curiosityai.nl)
 
 ## Automated Evaluation Results
 

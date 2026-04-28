@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import ollama
@@ -17,7 +18,14 @@ _log = get_logger("ollama")
 _CACHE_TTL_SECONDS = 30.0
 _cache_lock = threading.Lock()
 _cache_value: Optional[List[Dict[str, Any]]] = None
+_cache_reachable: Optional[bool] = None
 _cache_expires_at: float = 0.0
+
+
+@dataclass(frozen=True)
+class ModelListInventory:
+    models: List[Dict[str, Any]]
+    reachable: bool
 
 
 def _iter_model_names(raw_models: Iterable[Dict[str, Any]]) -> List[str]:
@@ -50,6 +58,38 @@ def _ollama_api(timeout: Optional[float] = None) -> Any:
     return ollama.Client(timeout=timeout)
 
 
+def list_models_with_status(
+    *,
+    ttl: Optional[float] = None,
+    force_refresh: bool = False,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> ModelListInventory:
+    """Return cached Ollama model listing plus whether the list call succeeded."""
+    global _cache_value, _cache_reachable, _cache_expires_at
+    effective_ttl = ttl
+    if effective_ttl is None:
+        effective_ttl = settings.model_list_ttl if settings is not None else _CACHE_TTL_SECONDS
+    now = time.monotonic()
+    with _cache_lock:
+        if not force_refresh and _cache_value is not None and now < _cache_expires_at:
+            return ModelListInventory(_cache_value, bool(_cache_reachable))
+    reachable = True
+    try:
+        api = _ollama_api(_request_timeout(settings=settings, timeout=timeout))
+        listing = api.list()
+        raw_models = list(listing.get("models", []))
+    except Exception as e:
+        _log.warning("list_models_failed", extra={"err": str(e)})
+        raw_models = []
+        reachable = False
+    with _cache_lock:
+        _cache_value = raw_models
+        _cache_reachable = reachable
+        _cache_expires_at = now + effective_ttl
+    return ModelListInventory(raw_models, reachable)
+
+
 def list_models(
     *,
     ttl: Optional[float] = None,
@@ -58,25 +98,12 @@ def list_models(
     timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """Return the raw ``ollama.list()['models']`` list, cached for ``ttl`` seconds."""
-    global _cache_value, _cache_expires_at
-    effective_ttl = ttl
-    if effective_ttl is None:
-        effective_ttl = settings.model_list_ttl if settings is not None else _CACHE_TTL_SECONDS
-    now = time.monotonic()
-    with _cache_lock:
-        if not force_refresh and _cache_value is not None and now < _cache_expires_at:
-            return _cache_value
-    try:
-        api = _ollama_api(_request_timeout(settings=settings, timeout=timeout))
-        listing = api.list()
-        raw_models = list(listing.get("models", []))
-    except Exception as e:
-        _log.warning("list_models_failed", extra={"err": str(e)})
-        raw_models = []
-    with _cache_lock:
-        _cache_value = raw_models
-        _cache_expires_at = now + effective_ttl
-    return raw_models
+    return list_models_with_status(
+        ttl=ttl,
+        force_refresh=force_refresh,
+        settings=settings,
+        timeout=timeout,
+    ).models
 
 
 def _norm(s: str) -> str:
@@ -241,7 +268,8 @@ def query_ollama_stream(
 
 def clear_model_cache() -> None:
     """Reset the list_models cache (used by tests)."""
-    global _cache_value, _cache_expires_at
+    global _cache_value, _cache_reachable, _cache_expires_at
     with _cache_lock:
         _cache_value = None
+        _cache_reachable = None
         _cache_expires_at = 0.0

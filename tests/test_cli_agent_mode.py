@@ -67,6 +67,46 @@ def test_json_quiet_prints_single_machine_summary(tmp_path, monkeypatch, capsys)
     }
 
 
+def test_json_without_quiet_prints_single_machine_summary(tmp_path, monkeypatch, capsys):
+    image = tmp_path / "invoice.png"
+    image.write_bytes(b"not-real-image")
+    out = tmp_path / "results.csv"
+
+    monkeypatch.setattr(
+        cli,
+        "resolve_model_name",
+        lambda model, **kwargs: (True, model, "Using closest local tag."),
+    )
+
+    def fake_run_batch(files, cfg):
+        yield Result(
+            source="invoice.png",
+            mode="describe",
+            text="Invoice summary",
+            latency_ms=8,
+        )
+
+    monkeypatch.setattr(cli, "run_batch", fake_run_batch)
+
+    code = cli.main(
+        [
+            "--json",
+            "--out-results",
+            str(out),
+            str(image),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert code == 0
+    assert captured.out.count("\n") == 1
+    assert payload["ok"] is True
+    assert payload["processed_files"] == 1
+    assert payload["results"][0]["text"] == "Invoice summary"
+
+
 def test_json_quiet_schema_warning_does_not_break_stdout_json(tmp_path, monkeypatch, capsys):
     missing = tmp_path / "missing.png"
     missing_schema = tmp_path / "missing-schema.json"

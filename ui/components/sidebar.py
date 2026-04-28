@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
-from adapters.ollama_adapter import get_available_models, list_models
+from adapters.ollama_adapter import get_available_models, list_models_with_status
 from core.prompts import PromptConfig
 from core.settings import Settings
 from .setup_status import (
@@ -35,6 +35,16 @@ class SidebarState:
     process_button: bool = False
 
 
+def _load_local_model_inventory(base_settings: Settings) -> tuple[List[str], bool]:
+    inventory = list_models_with_status(settings=base_settings)
+    model_names = [
+        str(model.get("name") or model.get("model") or "")
+        for model in inventory.models
+        if model.get("name") or model.get("model")
+    ]
+    return model_names, inventory.reachable
+
+
 def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> SidebarState:
     state = SidebarState(settings=base_settings)
     with st.sidebar:
@@ -59,11 +69,7 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
             "deepseek-ocr",
             "MHKetbi/Unsloth_gemma3-12b-it:latest",
         ]
-        local_models = [
-            str(model.get("name") or model.get("model") or "")
-            for model in list_models(settings=base_settings)
-            if model.get("name") or model.get("model")
-        ]
+        local_models, ollama_available = _load_local_model_inventory(base_settings)
         model_options = [
             m for m in get_available_models(default_models, settings=base_settings)
             if "gpt-oss" not in str(m).lower()
@@ -75,7 +81,7 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
         )
         render_setup_status(
             build_readiness_items(
-                ollama_available=bool(local_models),
+                ollama_available=ollama_available,
                 model_names=local_models,
                 selected_model=state.selected_model,
                 pdf_supported=pdf_supported,

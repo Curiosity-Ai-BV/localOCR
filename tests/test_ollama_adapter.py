@@ -93,6 +93,21 @@ def test_list_models_cache_ttl():
     assert calls["n"] == 2
 
 
+def test_list_models_with_status_distinguishes_empty_success_from_failure():
+    with patch.object(adapter.ollama, "list", return_value=_fake_listing([])):
+        inventory = adapter.list_models_with_status()
+
+    assert inventory.models == []
+    assert inventory.reachable is True
+
+    adapter.clear_model_cache()
+    with patch.object(adapter.ollama, "list", side_effect=Exception("down")):
+        inventory = adapter.list_models_with_status()
+
+    assert inventory.models == []
+    assert inventory.reachable is False
+
+
 def test_list_models_uses_settings_ttl_for_cache_expiry(monkeypatch):
     settings = Settings(model_list_ttl=1.0, request_timeout=None)
     calls = {"n": 0}

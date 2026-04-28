@@ -224,9 +224,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     start = time.perf_counter()
     if valid_inputs:
         available, resolved_model, note = resolve_model_name(args.model, settings=run_settings)
-        if note and not args.quiet:
+        if note and not args.quiet and not args.json:
             print(f"[!] {note}")
-        if not available and not args.quiet:
+        if not available and not args.quiet and not args.json:
             print(f"[i] Could not confirm model '{args.model}'. Attempting anyway.")
 
         limiter = RateLimiter(args.rate_limit if args.rate_limit > 0 else None)
@@ -266,7 +266,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ]
 
     elapsed = time.perf_counter() - start
-    if not args.quiet:
+    if not args.quiet and not args.json:
         print(f"Processed {len(args.files)} file(s) in {elapsed:.2f}s")
 
     write_results(all_results, args.out_results, format="csv")
