@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import ollama
 
 from core.errors import ModelUnavailable
 from core.logging import get_logger
+from core.settings import Settings
 
 _log = get_logger("ollama")
 
@@ -31,22 +32,50 @@ def _iter_model_names(raw_models: Iterable[Dict[str, Any]]) -> List[str]:
     return names
 
 
-def list_models(*, ttl: float = _CACHE_TTL_SECONDS, force_refresh: bool = False) -> List[Dict[str, Any]]:
+def _request_timeout(
+    *,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> Optional[float]:
+    if timeout is not None:
+        return timeout
+    if settings is not None:
+        return settings.request_timeout
+    return None
+
+
+def _ollama_api(timeout: Optional[float] = None) -> Any:
+    if timeout is None:
+        return ollama
+    return ollama.Client(timeout=timeout)
+
+
+def list_models(
+    *,
+    ttl: Optional[float] = None,
+    force_refresh: bool = False,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> List[Dict[str, Any]]:
     """Return the raw ``ollama.list()['models']`` list, cached for ``ttl`` seconds."""
     global _cache_value, _cache_expires_at
+    effective_ttl = ttl
+    if effective_ttl is None:
+        effective_ttl = settings.model_list_ttl if settings is not None else _CACHE_TTL_SECONDS
     now = time.monotonic()
     with _cache_lock:
         if not force_refresh and _cache_value is not None and now < _cache_expires_at:
             return _cache_value
     try:
-        listing = ollama.list()
+        api = _ollama_api(_request_timeout(settings=settings, timeout=timeout))
+        listing = api.list()
         raw_models = list(listing.get("models", []))
     except Exception as e:
         _log.warning("list_models_failed", extra={"err": str(e)})
         raw_models = []
     with _cache_lock:
         _cache_value = raw_models
-        _cache_expires_at = now + ttl
+        _cache_expires_at = now + effective_ttl
     return raw_models
 
 
@@ -59,16 +88,22 @@ def _base(s: str) -> str:
     return parts[0] if len(parts) == 2 else s
 
 
-def resolve_model_name(model: str) -> Tuple[bool, str, Optional[str]]:
+def resolve_model_name(
+    model: str,
+    *,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> Tuple[bool, str, Optional[str]]:
     """Resolve a usable local model name for callers that will execute requests."""
+    request_timeout = _request_timeout(settings=settings, timeout=timeout)
     try:
-        ollama.show(model)
+        _ollama_api(request_timeout).show(model)
         return True, model, None
     except Exception:
         pass
 
     try:
-        raw_models = list_models()
+        raw_models = list_models(settings=settings, timeout=request_timeout)
     except Exception as e:
         return True, model, f"Could not verify model availability: {e}"
 
@@ -94,7 +129,12 @@ def resolve_model_name(model: str) -> Tuple[bool, str, Optional[str]]:
     )
 
 
-def ensure_model_available(model: str) -> Tuple[bool, Optional[str]]:
+def ensure_model_available(
+    model: str,
+    *,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> Tuple[bool, Optional[str]]:
     """Check for model availability in Ollama.
 
     Resolution order:
@@ -106,17 +146,22 @@ def ensure_model_available(model: str) -> Tuple[bool, Optional[str]]:
     Substring matching was removed because it silently picked the wrong
     quantization (e.g. ``gemma4:e4b`` vs ``gemma4:26b``).
     """
-    ok, _resolved, note = resolve_model_name(model)
+    ok, _resolved, note = resolve_model_name(model, settings=settings, timeout=timeout)
     return ok, note
 
 
-def get_available_models(defaults: Optional[List[str]] = None) -> List[str]:
+def get_available_models(
+    defaults: Optional[List[str]] = None,
+    *,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> List[str]:
     """Return a list of available model names, preferring locally installed."""
     defaults = defaults or []
     ordered: List[str] = []
     seen: set[str] = set()
     try:
-        raw = list_models()
+        raw = list_models(settings=settings, timeout=timeout)
         for name in _iter_model_names(raw):
             if name not in seen:
                 ordered.append(name)
@@ -138,19 +183,21 @@ def query_ollama(
     options: Optional[dict] = None,
     system_prompt: Optional[str] = None,
     format: Optional[str] = None,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
 ) -> str:
     """Query Ollama chat with an image, returning content string."""
-    messages = []
+    messages: List[Dict[str, Any]] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt, "images": [image_base64]})
 
     try:
-        kwargs = {"model": model, "messages": messages, "options": options or {}}
+        kwargs: Dict[str, Any] = {"model": model, "messages": messages, "options": options or {}}
         if format:
             kwargs["format"] = format
             
-        response = ollama.chat(**kwargs)
+        response = _ollama_api(_request_timeout(settings=settings, timeout=timeout)).chat(**kwargs)
         content = response.get("message", {}).get("content", "")
         if not isinstance(content, str):
             raise ModelUnavailable("Unexpected response content type from model")
@@ -168,15 +215,18 @@ def query_ollama_stream(
     *,
     options: Optional[dict] = None,
     system_prompt: Optional[str] = None,
-):
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> Iterator[str]:
     """Yield content chunks from Ollama's streaming chat API."""
-    messages = []
+    messages: List[Dict[str, Any]] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt, "images": [image_base64]})
 
     try:
-        for chunk in ollama.chat(
+        api = _ollama_api(_request_timeout(settings=settings, timeout=timeout))
+        for chunk in api.chat(
             model=model,
             messages=messages,
             options=options or {},

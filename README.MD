@@ -90,8 +90,22 @@ venv\Scripts\Activate.ps1
 venv\Scripts\activate.bat
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -c constraints.txt -r requirements.txt
 ```
+
+For contribution work, install the development tools with the same constraints
+file so local checks match CI:
+
+```bash
+pip install -c constraints.txt -r requirements-dev.txt
+make check
+```
+
+`constraints.txt` pins the verified runtime, development, and stable transitive
+dependency set. Python-specific compiled transitive packages are resolved per
+interpreter. CI installs through this file on Python 3.10, 3.11, 3.12, and 3.13
+before running `make check`; the Ollama-backed evaluation runs only once on
+Python 3.11 to keep the workflow practical.
 
 ## Running the application
 

@@ -17,6 +17,7 @@ from ui.components import (
     render_results,
     render_sidebar,
 )
+from ui.components.setup_status import PDF_PER_PAGE_MODE
 
 st.set_page_config(
     page_title="Curiosity AI Scans",
@@ -95,7 +96,7 @@ def _count_items(uploaded_files, pdf_process_mode: str) -> int:
         file_bytes = uf.read()
         uf.seek(0)
         if uf.name.lower().endswith(".pdf") and PDF_SUPPORT:
-            if pdf_process_mode == "Process each page separately":
+            if pdf_process_mode == PDF_PER_PAGE_MODE:
                 try:
                     total += get_pdf_page_count(file_bytes)
                 except Exception:
@@ -114,7 +115,7 @@ def run_processing(state: SidebarState, results_placeholder) -> None:
     _set_state("results", [])
     _set_state("display_entries", [])
 
-    available, resolved_model, note = resolve_model_name(state.selected_model)
+    available, resolved_model, note = resolve_model_name(state.selected_model, settings=state.settings)
     if note:
         st.warning(note)
     if not available:
@@ -136,7 +137,7 @@ def run_processing(state: SidebarState, results_placeholder) -> None:
         options=state.options,
         settings=state.settings,
         prompts=state.prompts,
-        pdf_pages_separately=(state.pdf_process_mode == "Process each page separately"),
+        pdf_pages_separately=(state.pdf_process_mode == PDF_PER_PAGE_MODE),
     )
 
     results_list: List[Result] = _get_state("results", [])
@@ -202,7 +203,7 @@ if not PDF_SUPPORT:
 _get_state("results", [])
 _get_state("display_entries", [])
 
-state = render_sidebar(SETTINGS)
+state = render_sidebar(SETTINGS, pdf_supported=PDF_SUPPORT)
 
 results_placeholder = st.empty()
 
@@ -222,19 +223,7 @@ if results_list:
 
 if not state.uploaded_files and not results_list:
     st.info("Add files on the left to get started")
-    st.write(
-        """
-    ## How to use this app:
-    1. Upload one or more images or PDF files using the sidebar on the left
-    2. Select which vision model to use for analysis
-    3. Choose between general description or custom field extraction
-    4. If using custom extraction, specify the fields you want to extract
-    5. For PDFs, choose whether to process each page separately or the entire document
-    6. Click 'Run Scan' to analyze them
-    7. View the results for each image or PDF page
-    8. Download results as a CSV file
-    """
-    )
+    st.caption("Upload images or PDFs, choose a local vision model, then run a scan.")
 
 st.markdown("---")
 st.markdown(

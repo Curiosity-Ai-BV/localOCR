@@ -1,8 +1,9 @@
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 
 import adapters.ollama_adapter as adapter
+from core.settings import Settings
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +91,49 @@ def test_list_models_cache_ttl():
     with patch.object(adapter.ollama, "list", side_effect=_fake_list):
         adapter.list_models()
     assert calls["n"] == 2
+
+
+def test_list_models_uses_settings_ttl_for_cache_expiry(monkeypatch):
+    settings = Settings(model_list_ttl=1.0, request_timeout=None)
+    calls = {"n": 0}
+
+    def _fake_list():
+        calls["n"] += 1
+        return _fake_listing([f"m{calls['n']}"])
+
+    clock = iter([10.0, 10.5, 11.1])
+    monkeypatch.setattr(adapter.time, "monotonic", lambda: next(clock))
+
+    with patch.object(adapter.ollama, "list", side_effect=_fake_list):
+        assert adapter.list_models(settings=settings) == _fake_listing(["m1"])["models"]
+        assert adapter.list_models(settings=settings) == _fake_listing(["m1"])["models"]
+        assert adapter.list_models(settings=settings) == _fake_listing(["m2"])["models"]
+
+    assert calls["n"] == 2
+
+
+def test_list_show_and_chat_use_settings_request_timeout():
+    settings = Settings(request_timeout=9.5)
+    client = Mock()
+    client.list.return_value = _fake_listing(["gemma4:latest"])
+    client.show.return_value = {"details": {}}
+    client.chat.return_value = {"message": {"content": "done"}}
+
+    with patch.object(adapter.ollama, "Client", return_value=client) as client_factory:
+        assert adapter.list_models(settings=settings) == _fake_listing(["gemma4:latest"])["models"]
+        ok, resolved, note = adapter.resolve_model_name("gemma4:latest", settings=settings)
+        content = adapter.query_ollama("prompt", "img", "gemma4:latest", settings=settings)
+
+    assert (ok, resolved, note) == (True, "gemma4:latest", None)
+    assert content == "done"
+    assert client_factory.call_args_list == [
+        call(timeout=9.5),
+        call(timeout=9.5),
+        call(timeout=9.5),
+    ]
+    client.list.assert_called_once_with()
+    client.show.assert_called_once_with("gemma4:latest")
+    client.chat.assert_called_once()
 
 
 def test_substring_no_longer_matches():

@@ -1,10 +1,10 @@
-.PHONY: test lint deps-check check eval install run
+.PHONY: test lint type deps-check check eval install run
 
 PYTHON = $(shell if [ -f venv/bin/python ]; then echo "venv/bin/python"; else echo "python3"; fi)
 
 install:
-	$(PYTHON) -m pip install -r requirements.txt
-	$(PYTHON) -m pip install -r requirements-dev.txt
+	$(PYTHON) -m pip install -c constraints.txt -r requirements.txt
+	$(PYTHON) -m pip install -c constraints.txt -r requirements-dev.txt
 
 test:
 	$(PYTHON) -m pytest -q
@@ -12,10 +12,13 @@ test:
 lint:
 	$(PYTHON) -m ruff check .
 
+type:
+	$(PYTHON) -m mypy .
+
 deps-check:
 	$(PYTHON) -m pip check
 
-check: deps-check lint test
+check: deps-check lint type test
 
 eval:
 	@echo "Ensuring Ollama is running..."

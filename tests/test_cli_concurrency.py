@@ -75,7 +75,7 @@ def test_cli_parallel_results_preserve_input_order(tmp_path, monkeypatch):
     fast.write_bytes(b"fast")
     out = tmp_path / "results.csv"
 
-    monkeypatch.setattr(cli, "resolve_model_name", lambda model: (True, model, None))
+    monkeypatch.setattr(cli, "resolve_model_name", lambda model, **kwargs: (True, model, None))
 
     def fake_run_batch(files, cfg):
         path = Path(files[0])

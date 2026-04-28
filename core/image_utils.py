@@ -20,7 +20,7 @@ def resize_image(image: Image.Image, max_size: int = DEFAULT_MAX_IMAGE_SIZE) -> 
     else:
         new_height = max_size
         new_width = max(1, int(width * (max_size / max(height, 1))))
-    return image.resize((new_width, new_height), Image.LANCZOS)
+    return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
 
 def image_to_base64(image: Image.Image, quality: int = DEFAULT_JPEG_QUALITY) -> Tuple[str, int]:
