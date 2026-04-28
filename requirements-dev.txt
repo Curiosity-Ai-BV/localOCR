@@ -1,5 +1,6 @@
-pytest>=7.0.0
-pytest-cov>=4.0.0
-matplotlib>=3.5.0
-ruff>=0.1.0
-mypy>=1.4.0
+pytest>=9.0.3
+pytest-cov>=7.1.0
+matplotlib>=3.10.9
+ruff>=0.15.12
+mypy>=1.20.2
+requests>=2.33.1

@@ -15,7 +15,7 @@ from core.export import write_results
 from core.logging import get_logger
 from core.models import Result
 from core.pdf_utils import PDFNotSupportedError, ensure_pdf_support, iter_pdf_pages
-from core.pipeline import BatchConfig, BatchJob, process_image, run_batch
+from core.pipeline import BatchConfig, process_image, run_batch
 from core.prompts import PromptConfig
 from core.settings import Settings
 from core.templates import load_templates_file  # noqa: F401 (back-compat export)
@@ -234,10 +234,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             all_results.append(r)
     else:
         # Preserve per-file ordering semantics by submitting each file as one job.
+        def _run_one(fpath: str) -> List[Result]:
+            return list(run_batch([fpath], cfg))
+
         with ThreadPoolExecutor(max_workers=args.max_concurrency) as ex:
-            futs = [ex.submit(lambda f=fpath: list(run_batch([f], cfg))) for fpath in files]
+            futs = {
+                ex.submit(_run_one, fpath): index
+                for index, fpath in enumerate(files)
+            }
+            ordered_results: List[List[Result]] = [[] for _ in files]
             for fut in as_completed(futs):
-                all_results.extend(fut.result())
+                ordered_results[futs[fut]] = fut.result()
+            for result_group in ordered_results:
+                all_results.extend(result_group)
 
     elapsed = time.perf_counter() - start
     print(f"Processed {len(files)} file(s) in {elapsed:.2f}s")

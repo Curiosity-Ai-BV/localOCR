@@ -32,7 +32,7 @@ def test_csv_round_trip(tmp_path):
 
 def test_jsonl_render():
     payload = render_results(sample_results(), format="jsonl")
-    lines = [l for l in payload.splitlines() if l]
+    lines = [line for line in payload.splitlines() if line]
     assert len(lines) == 2
     assert '"mode": "describe"' in lines[0]
     assert '"Invoice number"' in lines[1]

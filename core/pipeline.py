@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
+from inspect import Parameter, signature
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
 
 from PIL import Image
@@ -26,6 +27,34 @@ from core.settings import Settings
 JSONDict = Dict[str, object]
 
 _log = get_logger("pipeline")
+
+
+def _accepts_kwarg(func: Callable[..., str], name: str) -> bool:
+    try:
+        sig = signature(func)
+    except (TypeError, ValueError):
+        return True
+    for param in sig.parameters.values():
+        if param.kind is Parameter.VAR_KEYWORD:
+            return True
+        if param.name == name and param.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY):
+            return True
+    return False
+
+
+def _call_inference(
+    func: Callable[..., str],
+    prompt: str,
+    image_base64: str,
+    model: str,
+    **kwargs: Any,
+) -> str:
+    supported_kwargs = {
+        name: value
+        for name, value in kwargs.items()
+        if _accepts_kwarg(func, name)
+    }
+    return func(prompt, image_base64, model, **supported_kwargs)
 
 
 def _resolve_prompts(prompts: Optional[PromptConfig]) -> PromptConfig:
@@ -65,7 +94,7 @@ def process_image(
 
     if not fields:
         prompt = pcfg.build_description()
-        content = run_infer(prompt, img_base64, model)
+        content = _call_inference(run_infer, prompt, img_base64, model)
         elapsed = time.perf_counter() - t0
         return {
             "filename": filename,
@@ -77,7 +106,7 @@ def process_image(
         }, content, None
     else:
         prompt = pcfg.build_extraction(fields)
-        content = run_infer(prompt, img_base64, model, format="json")
+        content = _call_inference(run_infer, prompt, img_base64, model, format="json")
         structured_data: JSONDict = {"filename": filename}
         parsed = extract_structured_data(content, fields)
         structured_data.update(parsed)
@@ -167,7 +196,7 @@ def process_pdf(
     except PDFNotSupportedError as e:
         yield None, None, None, filename, str(e), None, None, None, None
     except Exception as e:
-        _log.exception("pdf_processing_failed", extra={"filename": filename})
+        _log.exception("pdf_processing_failed", extra={"source": filename})
         yield None, None, None, filename, f"Error processing PDF: {str(e)}", None, None, None, None
 
 

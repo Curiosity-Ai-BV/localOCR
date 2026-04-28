@@ -1,4 +1,4 @@
-.PHONY: test eval install run
+.PHONY: test lint deps-check check eval install run
 
 PYTHON = $(shell if [ -f venv/bin/python ]; then echo "venv/bin/python"; else echo "python3"; fi)
 
@@ -8,6 +8,14 @@ install:
 
 test:
 	$(PYTHON) -m pytest -q
+
+lint:
+	$(PYTHON) -m ruff check .
+
+deps-check:
+	$(PYTHON) -m pip check
+
+check: deps-check lint test
 
 eval:
 	@echo "Ensuring Ollama is running..."

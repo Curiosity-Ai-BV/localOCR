@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import streamlit as st
 from PIL import Image
+
+from adapters.ollama_adapter import resolve_model_name
+from core.models import Result
+from core.pdf_utils import get_pdf_page_count, is_pdf_supported
+from core.pipeline import BatchConfig, BatchJob, run_batch
+from core.settings import Settings
+from ui.components import (
+    SidebarState,
+    render_downloads,
+    render_results,
+    render_sidebar,
+)
 
 st.set_page_config(
     page_title="Curiosity AI Scans",
@@ -31,18 +43,6 @@ st.markdown(
     </style>
     """,
     unsafe_allow_html=True,
-)
-
-from adapters.ollama_adapter import resolve_model_name
-from core.models import Result
-from core.pdf_utils import get_pdf_page_count, is_pdf_supported
-from core.pipeline import BatchConfig, BatchJob, run_batch
-from core.settings import Settings
-from ui.components import (
-    SidebarState,
-    render_downloads,
-    render_results,
-    render_sidebar,
 )
 
 APP_TITLE = "Curiosity AI Scans"

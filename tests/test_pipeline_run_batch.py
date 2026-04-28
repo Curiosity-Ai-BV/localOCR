@@ -1,12 +1,8 @@
-import io
-
-import pytest
 from PIL import Image
 
 from core.models import Result
 from core.pipeline import BatchConfig, BatchJob, run_batch
 from core.prompts import PromptConfig
-from core.settings import Settings
 
 
 def _img(color=(255, 0, 0)) -> Image.Image:

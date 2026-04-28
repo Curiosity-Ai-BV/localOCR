@@ -10,10 +10,15 @@ prompt matches the config that originated the call.
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from PIL import Image
 
+import cli
+from core.export import read_results_csv
+from core.models import Result
 from core.pipeline import BatchConfig, BatchJob, run_batch
 from core.prompts import PromptConfig
 
@@ -61,3 +66,36 @@ def test_parallel_prompts_do_not_cross_contaminate():
     for tag, prompt in recorded:
         expected = "PROMPT_A" if tag == "A" else "PROMPT_B"
         assert prompt == expected, f"cross-contamination: tag={tag} prompt={prompt!r}"
+
+
+def test_cli_parallel_results_preserve_input_order(tmp_path, monkeypatch):
+    slow = tmp_path / "slow.png"
+    fast = tmp_path / "fast.png"
+    slow.write_bytes(b"slow")
+    fast.write_bytes(b"fast")
+    out = tmp_path / "results.csv"
+
+    monkeypatch.setattr(cli, "resolve_model_name", lambda model: (True, model, None))
+
+    def fake_run_batch(files, cfg):
+        path = Path(files[0])
+        if path.name == "slow.png":
+            time.sleep(0.05)
+        yield Result(source=path.name, mode="describe", text=f"done:{path.name}")
+
+    monkeypatch.setattr(cli, "run_batch", fake_run_batch)
+
+    code = cli.main(
+        [
+            "--max-concurrency",
+            "2",
+            "--out-results",
+            str(out),
+            str(slow),
+            str(fast),
+        ]
+    )
+
+    assert code == 0
+    rows = read_results_csv(out)
+    assert [row["Filename"] for row in rows] == ["slow.png", "fast.png"]
