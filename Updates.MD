@@ -1,3 +1,117 @@
+## 2026-05-03
+
+- Expanded the Docling setup docs with concrete `docling-tools` commands for both standard Docling pipeline artifacts and RapidOCR artifacts.
+- Documented that `DOCLING_ARTIFACTS_PATH` must point at the shared artifacts root and added checks for `model.safetensors` and the RapidOCR detection weights.
+- Added troubleshooting guidance for incomplete Docling artifact downloads and partial-cache recovery with `--force`.
+
+## 2026-05-02
+
+- Added a Streamlit theme config to force light-mode widgets at the framework level instead of relying only on post-render CSS overrides.
+- Deepened the UI CSS overrides for BaseWeb select menus, listbox options, text areas, expander headers, checkbox/radio controls, and sidebar alert surfaces so dark widget defaults do not leak into the light app.
+- Extended theme tests to cover the light Streamlit config plus nested listbox, text-area, and expander styling contracts.
+
+## 2026-05-02
+
+- Refined the Streamlit shell into a cohesive modern-minimal OCR workspace with lighter app chrome, calmer header/card surfaces, and consistent document-gray/scan-blue tokens.
+- Fixed out-of-place dark sidebar controls by forcing select boxes, uploader buttons, labels, popovers, and setup/help surfaces onto the shared light theme.
+- Added a focused theme regression assertion for the Streamlit header and select-control styling contract.
+
+## 2026-05-02
+
+- Buffered auto-mode Docling/hybrid PDF attempts so a later page failure falls back to the Ollama PDF route without emitting duplicate partial Docling results.
+- Applied selected preprocessing presets to Docling and hybrid image jobs, including rendered PDF page image jobs, and preserved the applied preprocessing steps in result evidence.
+- Added focused regressions for auto PDF fallback buffering and Docling/hybrid image preprocessing.
+
+## 2026-05-02
+
+- Fixed the Streamlit custom extraction field defaults so selecting an invoice, receipt, or table profile seeds the extraction fields from that profile instead of the generic invoice placeholder.
+- Fixed Docling image stream naming for rendered PDF pages so per-page Docling/hybrid PDF routes send PNG bytes with an image filename suffix.
+- Added focused regressions for profile-driven UI custom extraction defaults and rendered PDF page image stream names.
+
+## 2026-05-02
+
+- Restored UI profile preprocessing defaults by adding a Profile default option that routes `None` into `BatchConfig`.
+- Made Docling and hybrid PDF routes honor per-page PDF processing by fanning rendered pages into Docling image jobs with page metadata.
+- Added focused regressions for Streamlit profile-default preprocessing and Docling/hybrid PDF page fan-out.
+
+## 2026-05-02
+
+- Preserved explicit description mode when a non-generic profile is selected by disabling profile field expansion for CLI/UI description runs.
+- Skipped unnecessary Ollama model preflight for hybrid description runs while keeping preflight for hybrid extraction, including profile-driven extraction fields.
+- Added focused regressions for CLI/UI profile description routing, hybrid description preflight skipping, and profile-field extraction preflight behavior.
+
+## 2026-05-01
+
+- Routed evaluation through the shared `BatchConfig`/`run_batch` OCR path so backend, profile, and preprocessing selections match CLI/UI behavior.
+- Added deterministic metrics JSON output with run metadata, field and aggregate accuracy, backend/profile/preprocess group metrics, detailed rows, and evidence path metadata.
+- Added evaluator evidence JSON export backed by `write_evidence`, including deterministic mock `Result` objects so mock runs work without Ollama and never mutate the README.
+- Updated README docs for backend modes, profiles, preprocessing presets, optional local Docling setup, CLI evidence export, and evaluator metrics/evidence flags.
+
+## 2026-05-01
+
+- Added Streamlit sidebar controls for document profile, backend mode, and preprocessing while preserving the existing upload, model, options, schema, appearance, and export flows.
+- Routed the selected UI profile/backend/preprocessing values into `BatchConfig` and skipped Ollama model preflight for pure Docling UI runs.
+- Added compact result evidence metadata plus expandable field evidence, and added an Evidence JSON download alongside the existing CSV, structured CSV, and JSONL exports.
+- Added focused UI/helper regressions for sidebar defaults/options, Streamlit processing routing, result evidence formatting, and download button coverage.
+
+## 2026-05-01
+
+- Added CLI backend/profile/preprocessing flags and routed them into `BatchConfig` while keeping the existing JSON stdout summary shape unchanged.
+- Skipped Ollama model preflight for pure Docling CLI runs and retained preflight for Ollama, hybrid, and auto modes.
+- Added detailed evidence JSON export via `--out-evidence`, including OCR/evidence metadata while excluding binary preview image bytes.
+- Added focused CLI/export regressions for flag routing, Docling preflight skipping, clean JSON stdout, and detailed evidence serialization.
+
+## 2026-05-01
+
+- Implemented `run_batch` routing for Docling, hybrid, and auto OCR backend modes while preserving the default Ollama path and lazy Docling imports.
+- Added hybrid extraction that uses Docling OCR/layout text as context and a text-only Ollama chat call for semantic field extraction, preserving OCR text/blocks and field evidence metadata.
+- Added deterministic auto routing so PDFs try Docling first and fall back to Ollama on Docling availability/configuration errors, while images continue through the existing Ollama route.
+- Added focused routing regressions for pure Docling, Docling errors, hybrid extraction/description behavior, auto fallback, auto image routing, and the Docling-free default Ollama path.
+
+## 2026-05-01
+
+- Closed the Docling adapter fallback path so missing local-only configuration symbols raise an unsupported-version error before `DocumentConverter` can be instantiated with defaults.
+
+## 2026-05-01
+
+- Hardened the optional Docling adapter so conversion requires `DOCLING_ARTIFACTS_PATH` to point at a local model artifacts directory before constructing the converter.
+- Configured Docling conversion with local artifacts, disabled remote services/plugins, kind-specific allowed formats, and safe stream names for extensionless sources.
+- Pinned the optional Docling dependency range to `docling>=2.88,<3` and added focused regressions for local-only configuration behavior.
+
+## 2026-05-01
+
+- Added an optional Docling adapter with lazy imports, availability status, and a clear install message for missing optional dependencies.
+- Added local-only Docling conversion helpers for PDF bytes and PIL images that return the shared `Result`/OCR block metadata shape without changing the default Ollama route.
+- Added `requirements-docling.txt` so Docling remains outside the base and constrained dependency sets.
+- Added focused adapter regressions that mock Docling and verify base imports stay Docling-free.
+
+## 2026-05-01
+
+- Added schema-first Ollama extraction by building JSON Schema from explicit or profile-provided fields and forwarding it through the existing extraction path.
+- Added simple per-field extraction evidence on `Result.field_evidence` while keeping `Result.fields` as plain extracted values and preserving missing-field behavior.
+- Enabled built-in profile fields, such as the invoice profile, to trigger extraction when no explicit fields are supplied while generic profile runs remain descriptive by default.
+- Added focused regressions for schema generation, adapter format forwarding, evidence separation, missing requested fields, and profile-driven extraction mode.
+
+## 2026-05-01
+
+- Fixed backend routing metadata so PDF batch results report deterministic preprocessing steps without changing the existing 9-value `process_pdf` tuple.
+- Applied document profile preprocessing defaults when `BatchConfig.preprocess` is omitted while preserving explicit `preprocess="none"` overrides.
+- Added focused regressions for invoice profile defaults, explicit no-preprocess overrides, and PDF/image preprocessing metadata parity.
+
+## 2026-05-01
+
+- Added an OCR backend routing module with recognized `ollama`, `docling`, `hybrid`, and `auto` backend modes while keeping only the Ollama path implemented.
+- Extended `BatchConfig` with defaulted backend, profile, and preprocessing routing fields; `BatchConfig()` now resolves the default model from settings and keeps Ollama/generic/none defaults.
+- Preserved the existing image, PDF, and batch result shapes while adding Result metadata for the active engine/profile on the default Ollama route.
+- Added focused pipeline tests for backend defaults, default Ollama routing, and explicit non-Ollama unsupported-mode errors.
+
+## 2026-05-01
+
+- Added core OCR evidence, document profile, and preprocessing result dataclasses while preserving existing `Result` constructor compatibility.
+- Added built-in generic, invoice, receipt, and table profile selection with clear invalid-profile errors.
+- Added Pillow-only preprocessing presets for none, document cleanup, and high-accuracy scans without mutating source images.
+- Added focused tests for model defaults/serialization, profile lookup, and deterministic preprocessing behavior.
+
 ## 2026-04-28
 
 - Kept CLI `--json` stdout parseable when `--quiet` is omitted by suppressing human progress/model-status lines in JSON mode.

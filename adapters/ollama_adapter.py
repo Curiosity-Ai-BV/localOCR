@@ -12,6 +12,7 @@ from core.logging import get_logger
 from core.settings import Settings
 
 _log = get_logger("ollama")
+OllamaFormat = str | Dict[str, Any]
 
 # --- list_models cache -----------------------------------------------------
 
@@ -209,7 +210,7 @@ def query_ollama(
     *,
     options: Optional[dict] = None,
     system_prompt: Optional[str] = None,
-    format: Optional[str] = None,
+    format: Optional[OllamaFormat] = None,
     settings: Optional[Settings] = None,
     timeout: Optional[float] = None,
 ) -> str:
@@ -221,9 +222,41 @@ def query_ollama(
 
     try:
         kwargs: Dict[str, Any] = {"model": model, "messages": messages, "options": options or {}}
-        if format:
+        if format is not None:
             kwargs["format"] = format
-            
+
+        response = _ollama_api(_request_timeout(settings=settings, timeout=timeout)).chat(**kwargs)
+        content = response.get("message", {}).get("content", "")
+        if not isinstance(content, str):
+            raise ModelUnavailable("Unexpected response content type from model")
+        return content
+    except ModelUnavailable:
+        raise
+    except Exception as e:
+        raise ModelUnavailable(f"Ollama chat failed: {e}") from e
+
+
+def query_ollama_text(
+    prompt: str,
+    model: str,
+    *,
+    options: Optional[dict] = None,
+    system_prompt: Optional[str] = None,
+    format: Optional[OllamaFormat] = None,
+    settings: Optional[Settings] = None,
+    timeout: Optional[float] = None,
+) -> str:
+    """Query Ollama chat with text only, returning content string."""
+    messages: List[Dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    try:
+        kwargs: Dict[str, Any] = {"model": model, "messages": messages, "options": options or {}}
+        if format is not None:
+            kwargs["format"] = format
+
         response = _ollama_api(_request_timeout(settings=settings, timeout=timeout)).chat(**kwargs)
         content = response.get("message", {}).get("content", "")
         if not isinstance(content, str):
