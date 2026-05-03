@@ -21,6 +21,28 @@ def test_app_css_includes_polish_and_accessibility_guards():
     assert '[data-testid="stTextArea"] textarea' in css
     assert '[data-testid="stExpander"] summary' in css
     assert "background-color: var(--ocr-surface) !important" in css
+    assert ".stButton > button *" in css
+    assert '[data-testid="stFileUploaderDropzone"] button *' in css
+    assert '[data-testid="stFileChips"]' in css
+    assert '[data-testid="stFileChip"]' in css
+    assert '[data-testid="stFileChipDeleteBtn"] button' in css
+    assert 'button[aria-label^="Remove "]' in css
+    assert 'button[aria-label^="Cancel upload"]' in css
+    assert 'button[aria-label="Add files"]' in css
+    assert '[data-testid="stFileUploaderDropzone"] button span' in css
+    assert '-webkit-text-fill-color: #FFFFFF !important' in css
+    assert 'button[kind="primary"]:hover' in css
+    assert 'background: #0F172A !important' in css
+    assert ".ocr-brand-row" in css
+    assert ".ocr-brand-logo" in css
+    assert ".ocr-app-description" in css
+    assert "width: clamp(46px, 4vw, 56px) !important" in css
+    assert "font-size: clamp(1.9rem, 3vw, 2.55rem) !important" in css
+    assert "max-width: 54rem" in css
+    assert "stroke: #FFFFFF !important" in css
+    assert '[data-testid="stNumberInput"] input' in css
+    assert "font-variant-numeric: tabular-nums" in css
+    assert "text-align: right" in css
     assert "@media (prefers-reduced-motion: reduce)" in css
 
 

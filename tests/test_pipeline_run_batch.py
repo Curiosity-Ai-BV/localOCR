@@ -57,6 +57,7 @@ def test_batch_config_defaults_to_ollama_generic_no_preprocess():
     assert cfg.profile_id == "generic"
     assert cfg.preprocess == "none"
     assert cfg.model == cfg.settings.default_model
+    assert cfg.model == "deepseek-ocr:latest"
 
 
 def test_batch_config_profile_default_preprocess_applies_when_omitted():

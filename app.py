@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+from pathlib import Path
 import time
 from typing import Any, Dict, List
 
@@ -21,6 +23,7 @@ from ui.components.setup_status import PDF_PER_PAGE_MODE
 from ui.theme import render_app_theme
 
 APP_TITLE = "Curiosity AI Scans"
+LOGO_PATH = Path(__file__).parent / "public" / "curiosity-ai-logo (2026).svg"
 SETTINGS = Settings.from_env()
 PDF_SUPPORT = is_pdf_supported()
 CUSTOM_EXTRACTION_MODE = "Custom field extraction"
@@ -49,6 +52,40 @@ def _get_state(key: str, default):
 
 def _set_state(key: str, value) -> None:
     st.session_state[_session_key(key)] = value
+
+
+def _logo_data_uri() -> str:
+    try:
+        logo_bytes = LOGO_PATH.read_bytes()
+    except OSError:
+        return ""
+    encoded_logo = base64.b64encode(logo_bytes).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded_logo}"
+
+
+def _brand_bar_style(logo_src: str) -> str:
+    if not logo_src:
+        return ""
+    return f"""
+    <style>
+        [data-testid="stHeader"]::before {{
+            content: "";
+            position: absolute;
+            left: 3.55rem;
+            top: 50%;
+            width: 26px;
+            height: 26px;
+            transform: translateY(-50%);
+            border-radius: 8px;
+            background-image: url("{logo_src}");
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: contain;
+            pointer-events: none;
+        }}
+
+    </style>
+    """
 
 
 def _resolve_model_name(model: str, *, settings: Settings):
@@ -220,13 +257,25 @@ def main() -> None:
     )
 
     render_app_theme()
+    logo_src = _logo_data_uri()
+    st.markdown(_brand_bar_style(logo_src), unsafe_allow_html=True)
+    logo_markup = (
+        f'<img class="ocr-brand-logo" src="{logo_src}" alt="Curiosity AI logo" />'
+        if logo_src
+        else ""
+    )
 
     st.markdown(
         f"""
         <section class="ocr-app-header" aria-label="{APP_TITLE}">
-            <p class="ocr-eyebrow">Local document OCR</p>
-            <h1>{APP_TITLE}</h1>
-            <p>Private scans, structured extraction, and export-ready results from local vision models.</p>
+            <div class="ocr-brand-row">
+                {logo_markup}
+                <div class="ocr-brand-copy">
+                    <p class="ocr-eyebrow">Local document OCR</p>
+                    <h1>{APP_TITLE}</h1>
+                    <p class="ocr-app-description">Private scans, structured extraction, and export-ready results from local vision models.</p>
+                </div>
+            </div>
         </section>
         """,
         unsafe_allow_html=True,

@@ -1,8 +1,62 @@
 ## 2026-05-03
 
+- Tightened the branded app header into a compact logo/title lockup with the description aligned under the title, smaller responsive type, and a measured logo size.
+- Moved the top-menu logo away from the sidebar expand control so the collapsed sidebar button and logo no longer overlap.
+
+## 2026-05-03
+
+- Simplified the Streamlit top menu branding to show only the Curiosity AI logo mark, removing the extra text label from the menu chrome.
+
+## 2026-05-03
+
+- Added the public Curiosity AI logo to the Streamlit top menu and the app header as an embedded SVG data URI so the UI has visible branding without relying on static file routing.
+- Refined the header layout around the brand mark with responsive logo sizing, aligned title copy, and theme regressions for the branded header styles.
+
+## 2026-05-03
+
+- Made the default DeepSeek OCR model tag explicit as `deepseek-ocr:latest` across runtime settings, sidebar options, docs, evaluation commands, and regressions.
+
+## 2026-05-03
+
+- Changed the standard OCR model from `gemma4:latest` to `deepseek-ocr:latest` in runtime settings, environment fallback defaults, and the sidebar fallback model order.
+- Pinned the sidebar model selector to show the configured default first even when Ollama returns a different local model order.
+- Updated README and Makefile examples so first-run setup and evaluation commands pull/use `deepseek-ocr:latest` by default.
+- Added regressions covering the default settings model, sidebar default ordering, and `BatchConfig()` model resolution.
+
+## 2026-05-03
+
+- Added a final high-specificity button foreground pass so Streamlit's nested markdown labels inside Upload and primary scan buttons stay white before hover, not only during hover.
+- Changed primary button hover treatment to a dark navy accent while preserving white text and icon foregrounds.
+- Added theme regression assertions for `-webkit-text-fill-color` and the primary hover accent contract.
+
+## 2026-05-03
+
+- Tightened uploaded-file chip styling with higher-specificity remove/cancel button selectors so Streamlit's blue icon-button theme no longer leaks into file rows.
+- Made uploaded-file rows more compact with smaller document icons, full-width wrappers, neutral remove buttons, and a smaller add-files button.
+- Forced the upload dropzone button label, icon, spans, and SVG paths to share the same white foreground color.
+
+## 2026-05-03
+
+- Polished the uploaded-file list by targeting Streamlit's `stFileChips` rows directly with compact full-width file chips, readable filename/size text, and bounded scrolling.
+- Narrowed primary uploader button styling to the dropzone upload button so file remove/add controls no longer inherit oversized blue primary-button treatment.
+- Added theme regressions for file-chip rows, delete buttons, and the add-files control.
+
+## 2026-05-03
+
 - Expanded the Docling setup docs with concrete `docling-tools` commands for both standard Docling pipeline artifacts and RapidOCR artifacts.
 - Documented that `DOCLING_ARTIFACTS_PATH` must point at the shared artifacts root and added checks for `model.safetensors` and the RapidOCR detection weights.
 - Added troubleshooting guidance for incomplete Docling artifact downloads and partial-cache recovery with `--force`.
+
+## 2026-05-03
+
+- Reworked the Advanced Model Options expander from cramped sidebar sliders into compact numeric inputs so values, labels, and bounds no longer overlap.
+- Added light, tabular number-input styling for the advanced controls, including restrained stepper buttons that do not inherit primary button treatment.
+- Added focused regressions for advanced option defaults/routing and the number-input theme contract.
+
+## 2026-05-03
+
+- Fixed nested Streamlit button labels and icons so upload, run scan, and download buttons keep white text/icons on blue primary backgrounds across normal, hover, and active states.
+- Added a theme regression assertion covering nested button descendants, including uploader button content.
 
 ## 2026-05-02
 
