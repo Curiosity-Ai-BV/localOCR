@@ -138,33 +138,56 @@ def get_app_css() -> str:
     .ocr-app-header {
         background: var(--ocr-surface-raised);
         border: 1px solid rgba(226, 232, 240, 0.95);
-        border-radius: 18px;
+        border-radius: 16px;
         box-shadow: var(--ocr-shadow-sm);
-        margin-bottom: 1.25rem;
-        padding: 1.35rem 1.5rem;
+        margin-bottom: 1rem;
+        padding: 1.05rem 1.2rem;
+    }
+
+    .ocr-brand-row {
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+        min-width: 0;
+    }
+
+    .ocr-brand-logo {
+        width: clamp(46px, 4vw, 56px) !important;
+        height: clamp(46px, 4vw, 56px) !important;
+        flex: 0 0 auto;
+        border-radius: 13px;
+        max-width: 56px !important;
+        object-fit: contain;
+    }
+
+    .ocr-brand-copy {
+        min-width: 0;
     }
 
     .ocr-eyebrow {
         color: var(--ocr-muted-soft);
-        font-size: 0.76rem;
+        font-size: 0.72rem;
         font-weight: 800;
-        letter-spacing: 0.06em;
-        margin: 0 0 0.4rem;
+        letter-spacing: 0.07em;
+        line-height: 1.2;
+        margin: 0 0 0.22rem;
         text-transform: uppercase;
     }
 
     .ocr-app-header h1 {
         color: var(--ocr-primary-strong);
-        font-size: clamp(2rem, 4vw, 3rem);
+        font-size: clamp(1.9rem, 3vw, 2.55rem) !important;
         font-weight: 800;
-        line-height: 1.04;
+        line-height: 1.02;
         margin: 0;
     }
 
-    .ocr-app-header p {
+    .ocr-app-description {
         color: var(--ocr-muted);
-        margin: 0.55rem 0 0;
-        max-width: 62rem;
+        font-size: 0.98rem;
+        line-height: 1.45;
+        margin: 0.38rem 0 0;
+        max-width: 54rem;
     }
 
     [data-testid="stFileUploader"] section,
@@ -217,7 +240,7 @@ def get_app_css() -> str:
 
     .stButton > button,
     [data-testid="stDownloadButton"] > button,
-    [data-testid="stFileUploader"] button {
+    [data-testid="stFileUploaderDropzone"] button {
         min-height: 44px;
         border-radius: 12px;
         border: 1px solid rgba(37, 99, 235, 0.22);
@@ -233,22 +256,55 @@ def get_app_css() -> str:
 
     .stButton > button:hover,
     [data-testid="stDownloadButton"] > button:hover,
-    [data-testid="stFileUploader"] button:hover {
+    [data-testid="stFileUploaderDropzone"] button:hover {
         background: var(--ocr-accent-hover) !important;
         border-color: rgba(29, 78, 216, 0.44);
         box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
         color: #FFFFFF !important;
     }
 
+    .stButton > button *,
+    .stButton > button:hover *,
+    .stButton > button:active *,
+    [data-testid="stDownloadButton"] > button *,
+    [data-testid="stDownloadButton"] > button:hover *,
+    [data-testid="stDownloadButton"] > button:active *,
+    [data-testid="stFileUploaderDropzone"] button *,
+    [data-testid="stFileUploaderDropzone"] button:hover *,
+    [data-testid="stFileUploaderDropzone"] button:active * {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
+        stroke: #FFFFFF !important;
+    }
+
+    .stButton > button p,
+    [data-testid="stDownloadButton"] > button p,
+    [data-testid="stFileUploaderDropzone"] button p {
+        color: #FFFFFF !important;
+        font-weight: 700;
+    }
+
+    [data-testid="stFileUploaderDropzone"] button,
+    [data-testid="stFileUploaderDropzone"] button *,
+    [data-testid="stFileUploaderDropzone"] button p,
+    [data-testid="stFileUploaderDropzone"] button span,
+    [data-testid="stFileUploaderDropzone"] button div,
+    [data-testid="stFileUploaderDropzone"] button svg,
+    [data-testid="stFileUploaderDropzone"] button svg * {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
+        stroke: #FFFFFF !important;
+    }
+
     .stButton > button:active,
     [data-testid="stDownloadButton"] > button:active,
-    [data-testid="stFileUploader"] button:active {
+    [data-testid="stFileUploaderDropzone"] button:active {
         transform: scale(0.96);
     }
 
     .stButton > button:focus-visible,
     [data-testid="stDownloadButton"] > button:focus-visible,
-    [data-testid="stFileUploader"] button:focus-visible,
+    [data-testid="stFileUploaderDropzone"] button:focus-visible,
     textarea:focus,
     input:focus,
     div[data-baseweb="select"] > div:focus-within {
@@ -256,9 +312,134 @@ def get_app_css() -> str:
         outline: 2px solid transparent;
     }
 
+    [data-testid="stFileChips"] {
+        display: grid !important;
+        gap: 0.45rem !important;
+        grid-template-columns: minmax(0, 1fr);
+        line-height: 1.2;
+        max-height: 13rem;
+        overflow-y: auto;
+        padding-right: 0.1rem;
+        width: 100%;
+    }
+
+    [data-testid="stFileChips"] > div,
+    [data-testid="stFileChips"] > div > div {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    [data-testid="stFileChip"] {
+        align-items: center !important;
+        background: #FFFFFF !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid var(--ocr-border) !important;
+        border-radius: 11px !important;
+        box-shadow: none !important;
+        display: grid !important;
+        gap: 0.5rem !important;
+        grid-template-columns: 30px minmax(0, 1fr) 28px;
+        min-width: 0 !important;
+        padding: 0.38rem 0.42rem !important;
+        width: 100% !important;
+    }
+
+    [data-testid="stFileChip"] > div:first-child {
+        background: var(--ocr-primary-strong) !important;
+        border-radius: 8px !important;
+        color: #FFFFFF !important;
+        height: 30px !important;
+        width: 30px !important;
+    }
+
+    [data-testid="stFileChip"] > div:first-child svg,
+    [data-testid="stFileChip"] > div:first-child svg * {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
+        stroke: #FFFFFF !important;
+    }
+
+    [data-testid="stFileChipName"] {
+        color: var(--ocr-primary-strong) !important;
+        font-size: 0.86rem !important;
+        font-weight: 700 !important;
+        line-height: 1.15 !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    [data-testid="stFileChipName"] + div {
+        color: var(--ocr-muted) !important;
+        font-size: 0.78rem !important;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.1 !important;
+    }
+
+    [data-testid="stFileChipDeleteBtn"] {
+        align-self: center !important;
+        justify-self: end !important;
+    }
+
+    [data-testid="stFileChipDeleteBtn"] button,
+    [data-testid="stFileUploader"] button[aria-label^="Remove "],
+    [data-testid="stFileUploader"] button[aria-label^="Cancel upload"],
+    [data-testid="stFileChips"] button[aria-label="Add files"] {
+        align-items: center !important;
+        background: transparent !important;
+        background-color: transparent !important;
+        background-image: none !important;
+        border: 1px solid transparent !important;
+        border-radius: 9px !important;
+        box-shadow: none !important;
+        color: var(--ocr-muted) !important;
+        display: inline-flex !important;
+        height: 28px !important;
+        justify-content: center !important;
+        line-height: 1 !important;
+        min-height: 28px !important;
+        min-width: 28px !important;
+        padding: 0 !important;
+        width: 28px !important;
+    }
+
+    [data-testid="stFileChips"] button[aria-label="Add files"] {
+        background: rgba(37, 99, 235, 0.1) !important;
+        background-color: rgba(37, 99, 235, 0.1) !important;
+        border-color: rgba(37, 99, 235, 0.18) !important;
+        color: var(--ocr-accent) !important;
+        margin-top: 0.1rem;
+        width: 34px !important;
+        height: 34px !important;
+    }
+
+    [data-testid="stFileChipDeleteBtn"] button *,
+    [data-testid="stFileUploader"] button[aria-label^="Remove "] *,
+    [data-testid="stFileUploader"] button[aria-label^="Cancel upload"] *,
+    [data-testid="stFileChips"] button[aria-label="Add files"] * {
+        color: currentColor !important;
+        fill: currentColor !important;
+        stroke: currentColor !important;
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+
+    [data-testid="stFileChipDeleteBtn"] button:hover,
+    [data-testid="stFileUploader"] button[aria-label^="Remove "]:hover,
+    [data-testid="stFileUploader"] button[aria-label^="Cancel upload"]:hover {
+        background: rgba(185, 28, 28, 0.08) !important;
+        background-color: rgba(185, 28, 28, 0.08) !important;
+        color: var(--ocr-error) !important;
+    }
+
+    [data-testid="stFileChips"] button[aria-label="Add files"]:hover {
+        background: rgba(37, 99, 235, 0.14) !important;
+        color: var(--ocr-accent-hover) !important;
+    }
+
     textarea,
     input,
     div[data-baseweb="select"] > div,
+    [data-testid="stNumberInput"] input,
     div[data-baseweb="textarea"],
     div[data-baseweb="input"] {
         background: var(--ocr-surface) !important;
@@ -275,6 +456,7 @@ def get_app_css() -> str:
     textarea:hover,
     input:hover,
     div[data-baseweb="select"] > div:hover,
+    [data-testid="stNumberInput"] input:hover,
     div[data-baseweb="textarea"]:hover,
     div[data-baseweb="input"]:hover {
         border-color: var(--ocr-border-strong) !important;
@@ -288,12 +470,36 @@ def get_app_css() -> str:
 
     [data-testid="stTextArea"] textarea,
     [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input,
     [data-baseweb="textarea"] textarea,
     [data-baseweb="input"] input {
         background: var(--ocr-surface) !important;
         background-color: var(--ocr-surface) !important;
         color: var(--ocr-foreground) !important;
         caret-color: var(--ocr-accent) !important;
+    }
+
+    [data-testid="stNumberInput"] {
+        margin-bottom: 0.1rem;
+    }
+
+    [data-testid="stNumberInput"] input {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    [data-testid="stNumberInput"] button {
+        background: var(--ocr-surface-muted) !important;
+        border-color: var(--ocr-border) !important;
+        color: var(--ocr-primary) !important;
+        min-height: 36px;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stNumberInput"] button * {
+        color: var(--ocr-primary) !important;
+        fill: var(--ocr-primary) !important;
+        stroke: var(--ocr-primary) !important;
     }
 
     div[data-baseweb="select"] input,
@@ -503,6 +709,53 @@ def get_app_css() -> str:
         text-decoration: underline;
     }
 
+    /* Final button foreground pass: Streamlit injects nested markdown labels inside buttons. */
+    [data-testid="stFileUploaderDropzone"] button,
+    [data-testid="stFileUploaderDropzone"] button[kind],
+    .stButton > button[kind="primary"],
+    .stButton > button[kind="primaryFormSubmit"],
+    button[kind="primary"] {
+        background: var(--ocr-accent) !important;
+        border-color: rgba(37, 99, 235, 0.36) !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+
+    [data-testid="stFileUploaderDropzone"] button:hover,
+    [data-testid="stFileUploaderDropzone"] button[kind]:hover,
+    .stButton > button[kind="primary"]:hover,
+    .stButton > button[kind="primaryFormSubmit"]:hover,
+    button[kind="primary"]:hover {
+        background: #0F172A !important;
+        border-color: #0F172A !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+
+    [data-testid="stFileUploaderDropzone"] button :is(p, span, div),
+    [data-testid="stFileUploaderDropzone"] button[kind] :is(p, span, div),
+    .stButton > button[kind="primary"] :is(p, span, div),
+    .stButton > button[kind="primaryFormSubmit"] :is(p, span, div),
+    button[kind="primary"] :is(p, span, div) {
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+
+    [data-testid="stFileUploaderDropzone"] button svg,
+    [data-testid="stFileUploaderDropzone"] button svg *,
+    [data-testid="stFileUploaderDropzone"] button[kind] svg,
+    [data-testid="stFileUploaderDropzone"] button[kind] svg *,
+    .stButton > button[kind="primary"] svg,
+    .stButton > button[kind="primary"] svg *,
+    .stButton > button[kind="primaryFormSubmit"] svg,
+    .stButton > button[kind="primaryFormSubmit"] svg *,
+    button[kind="primary"] svg,
+    button[kind="primary"] svg * {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
+        stroke: #FFFFFF !important;
+    }
+
     @media (max-width: 700px) {
         .block-container {
             padding-left: 1rem;
@@ -512,17 +765,40 @@ def get_app_css() -> str:
 
         .ocr-app-header {
             border-radius: 16px;
-            padding: 1rem;
+            padding: 0.9rem;
+        }
+
+        .ocr-brand-row {
+            align-items: flex-start;
+            gap: 0.7rem;
+        }
+
+        .ocr-brand-logo {
+            width: 42px !important;
+            height: 42px !important;
+            border-radius: 12px;
+        }
+
+        .ocr-app-header h1 {
+            font-size: clamp(1.65rem, 8vw, 2rem) !important;
+        }
+
+        .ocr-app-description {
+            font-size: 0.92rem;
+            line-height: 1.45;
         }
     }
 
     @media (prefers-reduced-motion: reduce) {
         .stButton > button,
         [data-testid="stDownloadButton"] > button,
-        [data-testid="stFileUploader"] button,
+        [data-testid="stFileUploaderDropzone"] button,
+        [data-testid="stFileChips"] button,
         [data-testid="stFileUploader"] section,
         textarea,
         input,
+        [data-testid="stNumberInput"] input,
+        [data-testid="stNumberInput"] button,
         div[data-baseweb="select"] > div,
         div[data-baseweb="textarea"],
         div[data-baseweb="input"] {
@@ -531,7 +807,8 @@ def get_app_css() -> str:
 
         .stButton > button:active,
         [data-testid="stDownloadButton"] > button:active,
-        [data-testid="stFileUploader"] button:active {
+        [data-testid="stFileUploaderDropzone"] button:active,
+        [data-testid="stFileChips"] button:active {
             transform: none;
         }
     }

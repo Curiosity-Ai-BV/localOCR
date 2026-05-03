@@ -34,7 +34,7 @@ class Settings:
     max_image_size: int = 1920
     jpeg_quality: int = 90
     pdf_scale: float = 1.5
-    default_model: str = "gemma4:latest"
+    default_model: str = "deepseek-ocr:latest"
     request_timeout: float = 120.0
     max_concurrency: int = 1
     model_list_ttl: float = 30.0
@@ -45,7 +45,7 @@ class Settings:
             max_image_size=_env_int("LOCALOCR_MAX_IMAGE_SIZE", 1920),
             jpeg_quality=_env_int("LOCALOCR_JPEG_QUALITY", 90),
             pdf_scale=_env_float("LOCALOCR_PDF_SCALE", 1.5),
-            default_model=_env_str("LOCALOCR_DEFAULT_MODEL", "gemma4:latest"),
+            default_model=_env_str("LOCALOCR_DEFAULT_MODEL", "deepseek-ocr:latest"),
             request_timeout=_env_float("LOCALOCR_REQUEST_TIMEOUT", 120.0),
             max_concurrency=_env_int("LOCALOCR_MAX_CONCURRENCY", 1),
             model_list_ttl=_env_float("LOCALOCR_MODEL_LIST_TTL", 30.0),

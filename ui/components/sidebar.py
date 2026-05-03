@@ -28,6 +28,7 @@ PREPROCESS_OPTIONS = (
     "high-accuracy-scan",
 )
 DEFAULT_MODELS = [
+    "deepseek-ocr:latest",
     "gemma4:latest",
     "gemma4",
     "gemma4:e4b",
@@ -37,7 +38,6 @@ DEFAULT_MODELS = [
     "gemma3:12b",
     "llama3.2-vision",
     "granite3.2-vision",
-    "deepseek-ocr",
     "MHKetbi/Unsloth_gemma3-12b-it:latest",
 ]
 GENERIC_CUSTOM_FIELDS = "Invoice number, Date, Company name, Total amount"
@@ -77,10 +77,14 @@ def _load_local_model_inventory(base_settings: Settings) -> tuple[List[str], boo
 def _available_model_options(default_models: List[str], base_settings: Settings) -> List[str]:
     from adapters.ollama_adapter import get_available_models
 
-    return [
+    options = [
         m for m in get_available_models(default_models, settings=base_settings)
         if "gpt-oss" not in str(m).lower()
     ]
+    default_model = base_settings.default_model
+    if default_model in options:
+        return [default_model, *[m for m in options if m != default_model]]
+    return options
 
 
 def _preprocess_label(option: str) -> str:
@@ -170,25 +174,61 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
                 "System prompt (optional)",
                 value="",
                 help="Steer the model's behavior with a system instruction.",
+                height=96,
             )
-            temperature = st.slider("Temperature", 0.0, 1.0, 0.2, 0.05)
-            top_p = st.slider("Top-p", 0.0, 1.0, 0.9, 0.05)
-            num_predict = st.slider("Max tokens to generate", 64, 4096, 512, 64)
-            num_ctx = st.slider("Context length (num_ctx)", 1024, 8192, 4096, 256)
+            temperature = st.number_input(
+                "Temperature",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.2,
+                step=0.05,
+                format="%.2f",
+            )
+            top_p = st.number_input(
+                "Top-p",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.9,
+                step=0.05,
+                format="%.2f",
+            )
+            num_predict = st.number_input(
+                "Max tokens to generate",
+                min_value=64,
+                max_value=4096,
+                value=512,
+                step=64,
+            )
+            num_ctx = st.number_input(
+                "Context length (num_ctx)",
+                min_value=1024,
+                max_value=8192,
+                value=4096,
+                step=256,
+            )
 
             st.caption("Image settings")
-            max_image_size = st.slider(
-                "Max image dimension (px)", 256, 4096, base_settings.max_image_size, 64
+            max_image_size = st.number_input(
+                "Max image dimension (px)",
+                min_value=256,
+                max_value=4096,
+                value=base_settings.max_image_size,
+                step=64,
             )
-            jpeg_quality = st.slider(
-                "JPEG quality", 60, 100, base_settings.jpeg_quality, 1
+            jpeg_quality = st.number_input(
+                "JPEG quality",
+                min_value=60,
+                max_value=100,
+                value=base_settings.jpeg_quality,
+                step=1,
             )
-            pdf_scale = st.slider(
+            pdf_scale = st.number_input(
                 "PDF render scale",
-                0.5,
-                3.0,
-                float(base_settings.pdf_scale),
-                0.1,
+                min_value=0.5,
+                max_value=3.0,
+                value=float(base_settings.pdf_scale),
+                step=0.1,
+                format="%.1f",
                 help="Higher = more detail but slower; 1.5 is a good default.",
             )
 

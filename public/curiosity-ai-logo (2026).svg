@@ -1,0 +1,19 @@
+<svg id="logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="" width="512" height="512">
+                    <!-- Minimalist C shape: A circle open on the right (approx 60 degree gap) -->
+                    <!-- Perimeter of r=35 is 2*pi*35 ≈ 220. We want a gap. -->
+                    <!-- stroke-dasharray: 180 (visible), 40 (gap) -->
+                    <!-- Rotate -20deg to center the gap on the right? -->
+                    <!-- Actually, let's just rotate 45 to make it dynamic, or 0 for stable C -->
+                    
+                    <!-- The "C" / Eye Outer Ring -->
+                    <!-- Start angle needs to be calculated or rotated. 
+                         If we rotate -45, the start of path is usually 3 o'clock.
+                         Let's use path for precision or dasharray with rotation. 
+                         dasharray 170 220 will show 170px line. -->
+                    <!-- Minimalist C shape: Arc from 45deg to 315deg (Gap on the right) -->
+                    <!-- M 74.7 74.7 (Start at bottom right) A 35 35 0 1 1 74.7 25.3 (End at top right, large arc) -->
+                    <path d="M 74.7 74.7 A 35 35 0 1 1 74.7 25.3" fill="none" stroke="rgb(79, 70, 229)" stroke-width="16" stroke-linecap="round"/>
+                    
+                    <!-- The "Ai" Pupil/Dot -->
+                    <circle cx="50" cy="50" r="9" fill="rgb(79, 70, 229)"/>
+                </svg>

@@ -66,6 +66,20 @@ class _Upload:
         return self._buffer.tell()
 
 
+def test_logo_data_uri_loads_public_svg():
+    assert app._logo_data_uri().startswith("data:image/svg+xml;base64,")
+
+
+def test_brand_bar_style_targets_streamlit_header():
+    style = app._brand_bar_style("data:image/svg+xml;base64,abc")
+
+    assert '[data-testid="stHeader"]::before' in style
+    assert 'background-image: url("data:image/svg+xml;base64,abc")' in style
+    assert "left: 3.55rem;" in style
+    assert '[data-testid="stHeader"]::after' not in style
+    assert 'content: "Curiosity AI"' not in style
+
+
 def test_run_processing_skips_ollama_preflight_for_docling_and_routes_config(monkeypatch):
     fake_st = _FakeStreamlit()
     captured = {}

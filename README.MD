@@ -57,6 +57,9 @@ brew install ollama
 ### Step 2: Pull a vision model
 
 ```bash
+# Default OCR model
+ollama pull deepseek-ocr:latest
+
 # Gemma 4 (all flavours)
 ollama pull gemma4:latest
 ollama pull gemma4:e4b
@@ -73,8 +76,6 @@ ollama pull llama3.2-vision
 # Granite 3.2 Vision (smaller footprint)
 ollama pull granite3.2-vision
 
-# DeepSeek OCR
-ollama pull deepseek-ocr
 ```
 
 Pull one or more — the app works with whichever you have installed.
@@ -176,7 +177,7 @@ You can now process files without the UI:
 
 ```bash
 python cli.py \
-  --model gemma4:latest \
+  --model deepseek-ocr:latest \
   --mode extract \
   --fields "Invoice number, Date, Total amount" \
   --ocr-backend auto \

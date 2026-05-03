@@ -23,8 +23,8 @@ check: deps-check lint type test
 eval:
 	@echo "Ensuring Ollama is running..."
 	@curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1 || (echo "Local Ollama engine not found. Booting 'ollama serve' in background..." && ollama serve >/dev/null 2>&1 & sleep 3)
-	@echo "Running local OCR evaluations using the default model (gemma4)..."
-	$(PYTHON) evaluate.py --model gemma4
+	@echo "Running local OCR evaluations using the default model (deepseek-ocr:latest)..."
+	$(PYTHON) evaluate.py --model deepseek-ocr:latest
 
 run:
 	$(PYTHON) -m streamlit run app.py

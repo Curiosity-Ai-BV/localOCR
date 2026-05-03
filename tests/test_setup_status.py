@@ -7,6 +7,7 @@ from core.settings import Settings
 import ui.components.sidebar as sidebar
 from ui.components.sidebar import (
     BACKEND_OPTIONS,
+    DEFAULT_MODELS,
     PREPROCESS_OPTIONS,
     PREPROCESS_PROFILE_DEFAULT,
     PROFILE_OPTIONS,
@@ -35,7 +36,7 @@ def test_pdf_first_page_mode_copy_is_truthful():
 def test_readiness_items_summarize_runtime_without_long_instructions():
     items = build_readiness_items(
         ollama_available=False,
-        model_names=["gemma3:12b", "deepseek-ocr"],
+        model_names=["gemma3:12b", "deepseek-ocr:latest"],
         selected_model="gemma4",
         pdf_supported=True,
     )
@@ -104,6 +105,9 @@ class _FakeSidebarStreamlit:
     def slider(self, *_args, **_kwargs):
         return _args[3]
 
+    def number_input(self, _label, **kwargs):
+        return kwargs["value"]
+
     def checkbox(self, *_args, value=False, **_kwargs):
         return value
 
@@ -165,6 +169,69 @@ def test_sidebar_processing_state_defaults_and_options():
         "document-clean",
         "high-accuracy-scan",
     )
+    assert DEFAULT_MODELS[0] == "deepseek-ocr:latest"
+
+
+def test_settings_default_model_is_deepseek_ocr(monkeypatch):
+    monkeypatch.delenv("LOCALOCR_DEFAULT_MODEL", raising=False)
+
+    assert Settings().default_model == "deepseek-ocr:latest"
+    assert Settings.from_env().default_model == "deepseek-ocr:latest"
+
+
+def test_sidebar_model_options_pin_default_model_first(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules,
+        "adapters.ollama_adapter",
+        SimpleNamespace(
+            get_available_models=lambda defaults, *, settings: [
+                "gemma4:latest",
+                "deepseek-ocr:latest",
+                *defaults,
+            ],
+        ),
+    )
+
+    options = sidebar._available_model_options(
+        ["deepseek-ocr:latest", "gemma4:latest"],
+        Settings(default_model="deepseek-ocr:latest"),
+    )
+
+    assert options[0] == "deepseek-ocr:latest"
+    assert options.count("deepseek-ocr:latest") == 1
+
+
+def test_sidebar_advanced_options_use_compact_number_inputs(monkeypatch):
+    fake_st = _FakeSidebarStreamlit()
+    seen_labels = []
+
+    def number_input(label, **kwargs):
+        seen_labels.append(label)
+        return kwargs["value"]
+
+    fake_st.number_input = number_input
+    monkeypatch.setattr(sidebar, "st", fake_st)
+
+    state = sidebar.render_sidebar(Settings(max_image_size=1024, jpeg_quality=88, pdf_scale=1.7))
+
+    assert seen_labels == [
+        "Temperature",
+        "Top-p",
+        "Max tokens to generate",
+        "Context length (num_ctx)",
+        "Max image dimension (px)",
+        "JPEG quality",
+        "PDF render scale",
+    ]
+    assert state.options == {
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "num_predict": 512,
+        "num_ctx": 4096,
+    }
+    assert state.settings.max_image_size == 1024
+    assert state.settings.jpeg_quality == 88
+    assert state.settings.pdf_scale == 1.7
 
 
 class _InvoiceProfileDefaultStreamlit(_FakeSidebarStreamlit):
