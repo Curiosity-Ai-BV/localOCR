@@ -1,6 +1,7 @@
 """Results rendering helpers for the Streamlit UI."""
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from html import escape
 from typing import Any, Dict, List
 
@@ -40,6 +41,24 @@ def format_result_metadata(entry: Dict[str, Any]) -> List[str]:
     return meta_bits
 
 
+def format_evidence_metadata(entry: Dict[str, Any]) -> List[str]:
+    """Format compact OCR routing/evidence metadata for display."""
+    meta_bits: List[str] = []
+    engine = entry.get("engine")
+    if isinstance(engine, str) and engine.strip():
+        meta_bits.append(f"engine: {engine.strip()}")
+
+    profile = entry.get("profile_id")
+    if isinstance(profile, str) and profile.strip():
+        meta_bits.append(f"profile: {profile.strip()}")
+
+    backend_note = entry.get("backend_note")
+    if isinstance(backend_note, str) and backend_note.strip():
+        meta_bits.append(f"note: {backend_note.strip()}")
+
+    return meta_bits
+
+
 def _render_result_heading(entry: Dict[str, Any]) -> None:
     label, class_name = get_status_badge(str(entry.get("status", "done")))
     filename = str(entry.get("filename") or "Untitled file")
@@ -53,6 +72,16 @@ def _render_result_heading(entry: Dict[str, Any]) -> None:
         ),
         unsafe_allow_html=True,
     )
+
+
+def _plain_json(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)  # type: ignore[arg-type]
+    if isinstance(value, dict):
+        return {str(k): _plain_json(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_plain_json(v) for v in value]
+    return value
 
 
 def render_results(
@@ -91,6 +120,12 @@ def render_results(
                             f'<p class="ocr-result-meta">{escape(" | ".join(meta_bits))}</p>',
                             unsafe_allow_html=True,
                         )
+                    evidence_meta = format_evidence_metadata(entry)
+                    if evidence_meta:
+                        st.markdown(
+                            f'<p class="ocr-result-meta">{escape(" | ".join(evidence_meta))}</p>',
+                            unsafe_allow_html=True,
+                        )
 
                 page_note = entry.get("page_note")
                 if isinstance(page_note, str) and page_note.strip():
@@ -99,6 +134,10 @@ def render_results(
                 if isinstance(structured, dict) and len(structured) > 1:
                     with st.expander("Structured JSON"):
                         st.json(structured)
+                field_evidence = entry.get("field_evidence")
+                if isinstance(field_evidence, dict) and field_evidence:
+                    with st.expander("Field evidence"):
+                        st.json(_plain_json(field_evidence))
                 err = entry.get("error")
                 if err:
                     st.error(err)

@@ -6,7 +6,7 @@ from typing import Iterable, List
 
 import streamlit as st
 
-from core.export import render_results
+from core.export import render_evidence, render_results
 from core.models import Result
 
 
@@ -15,7 +15,7 @@ def render_downloads(results: Iterable[Result]) -> None:
     if not items:
         return
     st.subheader("Export")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     with col1:
@@ -41,6 +41,14 @@ def render_downloads(results: Iterable[Result]) -> None:
             "Results (JSONL)",
             data=render_results(items, format="jsonl"),
             file_name=f"image_analysis_{timestamp}.jsonl",
+            mime="application/json",
+            use_container_width=True,
+        )
+    with col4:
+        st.download_button(
+            "Evidence (JSON)",
+            data=render_evidence(items),
+            file_name=f"ocr_evidence_{timestamp}.json",
             mime="application/json",
             use_container_width=True,
         )

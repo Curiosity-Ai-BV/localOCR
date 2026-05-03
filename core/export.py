@@ -9,6 +9,7 @@ import csv
 import io
 import json
 from pathlib import Path
+from dataclasses import asdict
 from typing import Any, Iterable, List, Literal, Sequence, TextIO, Union
 
 from core.models import Result
@@ -85,6 +86,56 @@ def _structured_csv(results: Sequence[Result]) -> str:
     return buf.getvalue()
 
 
+def _plain_dict(value: Any) -> Any:
+    if hasattr(value, "__dataclass_fields__"):
+        return asdict(value)
+    return value
+
+
+def _field_evidence_dict(result: Result) -> dict[str, Any]:
+    return {
+        field: _plain_dict(result.field_evidence[field])
+        for field in sorted(result.field_evidence)
+    }
+
+
+def _evidence_result(result: Result) -> dict[str, Any]:
+    return {
+        "source": result.source,
+        "mode": result.mode,
+        "text": result.text,
+        "fields": result.fields,
+        "ocr_text": result.ocr_text,
+        "ocr_blocks": [_plain_dict(block) for block in result.ocr_blocks],
+        "field_evidence": _field_evidence_dict(result),
+        "engine": result.engine,
+        "profile_id": result.profile_id,
+        "preprocess_steps": list(result.preprocess_steps),
+        "backend_note": result.backend_note,
+        "error": result.error,
+        "latency_ms": result.latency_ms,
+        "page": result.page,
+        "page_count": result.page_count,
+        "dimensions": list(result.dimensions) if result.dimensions else None,
+        "encoded_bytes": result.encoded_bytes,
+    }
+
+
+def render_evidence(results: Iterable[Result]) -> str:
+    """Serialize detailed OCR evidence without embedding binary previews."""
+    items = list(results)
+    payload = {
+        "schema_version": "localocr.evidence.v1",
+        "summary": {
+            "ok": not any(result.error for result in items),
+            "total_results": len(items),
+            "error_count": sum(1 for result in items if result.error),
+        },
+        "results": [_evidence_result(result) for result in items],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
 def render_results(results: Iterable[Result], format: Format = "csv") -> str:
     items = list(results)
     if format == "csv":
@@ -103,6 +154,14 @@ def write_results(
 ) -> str:
     """Write results to ``target`` and return the serialized payload."""
     payload = render_results(results, format=format)
+    with _open(target) as f:
+        f.write(payload)
+    return payload
+
+
+def write_evidence(results: Iterable[Result], target: Target) -> str:
+    """Write detailed OCR evidence JSON to ``target``."""
+    payload = render_evidence(results)
     with _open(target) as f:
         f.write(payload)
     return payload

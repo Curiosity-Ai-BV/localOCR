@@ -10,11 +10,11 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from PIL import Image
 
-from adapters.ollama_adapter import query_ollama, resolve_model_name
 from core.errors import OCRError
-from core.export import write_results
+from core.export import write_evidence, write_results
 from core.logging import get_logger
 from core.models import Mode, Result
+from core.ocr_backends import BACKEND_AUTO, BACKEND_HYBRID, BACKEND_OLLAMA
 from core.pdf_utils import PDFNotSupportedError, ensure_pdf_support, iter_pdf_pages
 from core.pipeline import BatchConfig, process_image, run_batch
 from core.prompts import PromptConfig
@@ -22,6 +22,22 @@ from core.settings import Settings
 from core.templates import load_templates_file  # noqa: F401 (back-compat export)
 
 _log = get_logger("cli")
+
+OLLAMA_BACKENDS = {BACKEND_OLLAMA, BACKEND_HYBRID, BACKEND_AUTO}
+
+
+def query_ollama(prompt: str, image_b64: str, model: str, **kwargs) -> str:
+    """Lazy wrapper so importing the CLI does not import Ollama bindings."""
+    from adapters.ollama_adapter import query_ollama as _query_ollama
+
+    return _query_ollama(prompt, image_b64, model, **kwargs)
+
+
+def resolve_model_name(model: str, **kwargs):
+    """Lazy wrapper preserving the existing CLI monkeypatch surface."""
+    from adapters.ollama_adapter import resolve_model_name as _resolve_model_name
+
+    return _resolve_model_name(model, **kwargs)
 
 
 class RateLimiter:
@@ -52,6 +68,34 @@ def _make_inference(
         limiter.wait()
         return query_ollama(prompt, image_b64, model, options=options, system_prompt=system_prompt, **kwargs)
     return _inner
+
+
+def _should_preflight_ollama(backend: str, fields: Optional[List[str]]) -> bool:
+    normalized = backend.strip().lower()
+    if normalized == BACKEND_HYBRID:
+        return bool(fields)
+    return normalized in OLLAMA_BACKENDS
+
+
+def _effective_fields_for_preflight(
+    *,
+    fields: Optional[List[str]],
+    profile_id: str,
+    use_profile_fields: bool,
+) -> Optional[List[str]]:
+    if fields:
+        return fields
+    if fields is not None and not use_profile_fields:
+        return fields
+    if not use_profile_fields:
+        return None
+    try:
+        from core.profiles import get_profile
+
+        profile_fields = get_profile(profile_id).fields
+    except ValueError:
+        return None
+    return list(profile_fields) if profile_fields else None
 
 
 # ---------------------------------------------------------------------------
@@ -162,9 +206,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--jpeg-quality", type=int, default=settings.jpeg_quality)
     p.add_argument("--pdf-scale", type=float, default=settings.pdf_scale)
     p.add_argument("--pdf-pages", action="store_true", help="Process each PDF page separately")
+    p.add_argument("--ocr-backend", choices=["ollama", "docling", "hybrid", "auto"], default="ollama")
+    p.add_argument("--profile", choices=["generic", "invoice", "receipt", "table"], default="generic")
+    p.add_argument(
+        "--preprocess",
+        choices=["none", "document-clean", "high-accuracy-scan"],
+        default=None,
+    )
     p.add_argument("--out-results", default="results.csv")
     p.add_argument("--out-structured", default="structured.csv")
     p.add_argument("--out-jsonl", default="", help="Optional path to write results as JSONL")
+    p.add_argument("--out-evidence", default="", help="Optional path to write detailed OCR evidence JSON")
     p.add_argument("--max-concurrency", type=int, default=settings.max_concurrency)
     p.add_argument("--rate-limit", type=float, default=0.0, help="Requests per second (0 = unlimited)")
     p.add_argument("--json", action="store_true", help="Print one machine-readable JSON summary to stdout")
@@ -203,8 +255,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(f"[!] Failed to load schema: {e}", file=sys.stderr)
         if not fields:
             fields = [s.strip() for s in args.fields.split(",") if s.strip()]
+        if not fields:
+            fields = None
     system_prompt = args.system_prompt or None
-    mode: Mode = "extract" if fields else "describe"
+    use_profile_fields = args.mode == "extract"
+    mode: Mode = "extract" if args.mode == "extract" else "describe"
+    preflight_fields = _effective_fields_for_preflight(
+        fields=fields,
+        profile_id=args.profile,
+        use_profile_fields=use_profile_fields,
+    )
 
     ordered_results: List[List[Result]] = [[] for _ in args.files]
     valid_inputs: List[Tuple[int, str]] = []
@@ -223,11 +283,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     start = time.perf_counter()
     if valid_inputs:
-        available, resolved_model, note = resolve_model_name(args.model, settings=run_settings)
-        if note and not args.quiet and not args.json:
-            print(f"[!] {note}")
-        if not available and not args.quiet and not args.json:
-            print(f"[i] Could not confirm model '{args.model}'. Attempting anyway.")
+        resolved_model = args.model
+        if _should_preflight_ollama(args.ocr_backend, preflight_fields):
+            available, resolved_model, note = resolve_model_name(args.model, settings=run_settings)
+            if note and not args.quiet and not args.json:
+                print(f"[!] {note}")
+            if not available and not args.quiet and not args.json:
+                print(f"[i] Could not confirm model '{args.model}'. Attempting anyway.")
 
         limiter = RateLimiter(args.rate_limit if args.rate_limit > 0 else None)
         inference = _make_inference(options, system_prompt, limiter)
@@ -241,6 +303,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             prompts=prompts,
             pdf_pages_separately=args.pdf_pages,
             inference=inference,
+            ocr_backend=args.ocr_backend,
+            profile_id=args.profile,
+            preprocess=args.preprocess,
+            use_profile_fields=use_profile_fields,
         )
 
         if args.max_concurrency <= 1:
@@ -278,6 +344,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.out_jsonl:
         write_results(all_results, args.out_jsonl, format="jsonl")
         wrote.append(args.out_jsonl)
+    if args.out_evidence:
+        write_evidence(all_results, args.out_evidence)
+        wrote.append(args.out_evidence)
     if args.json:
         payload = {
             "ok": not any(r.error for r in all_results),

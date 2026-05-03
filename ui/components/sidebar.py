@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
-from adapters.ollama_adapter import get_available_models, list_models_with_status
 from core.prompts import PromptConfig
+from core.profiles import get_profile
 from core.settings import Settings
 from .setup_status import (
     PDF_PER_PAGE_MODE,
@@ -17,6 +17,30 @@ from .setup_status import (
     get_pdf_mode_options,
     render_setup_status,
 )
+
+PROFILE_OPTIONS = ("generic", "invoice", "receipt", "table")
+BACKEND_OPTIONS = ("ollama", "docling", "hybrid", "auto")
+PREPROCESS_PROFILE_DEFAULT = "profile-default"
+PREPROCESS_OPTIONS = (
+    PREPROCESS_PROFILE_DEFAULT,
+    "none",
+    "document-clean",
+    "high-accuracy-scan",
+)
+DEFAULT_MODELS = [
+    "gemma4:latest",
+    "gemma4",
+    "gemma4:e4b",
+    "gemma4:e2b",
+    "gemma4:26b",
+    "gemma4:31b",
+    "gemma3:12b",
+    "llama3.2-vision",
+    "granite3.2-vision",
+    "deepseek-ocr",
+    "MHKetbi/Unsloth_gemma3-12b-it:latest",
+]
+GENERIC_CUSTOM_FIELDS = "Invoice number, Date, Company name, Total amount"
 
 
 @dataclass
@@ -28,6 +52,9 @@ class SidebarState:
     settings: Settings = field(default_factory=Settings)
     prompts: PromptConfig = field(default_factory=PromptConfig)
     fields: Optional[List[str]] = None
+    profile_id: str = "generic"
+    ocr_backend: str = "ollama"
+    preprocess: Optional[str] = None
     extraction_mode: str = "General description"
     pdf_process_mode: str = PDF_PER_PAGE_MODE
     show_images: bool = True
@@ -36,6 +63,8 @@ class SidebarState:
 
 
 def _load_local_model_inventory(base_settings: Settings) -> tuple[List[str], bool]:
+    from adapters.ollama_adapter import list_models_with_status
+
     inventory = list_models_with_status(settings=base_settings)
     model_names = [
         str(model.get("name") or model.get("model") or "")
@@ -43,6 +72,31 @@ def _load_local_model_inventory(base_settings: Settings) -> tuple[List[str], boo
         if model.get("name") or model.get("model")
     ]
     return model_names, inventory.reachable
+
+
+def _available_model_options(default_models: List[str], base_settings: Settings) -> List[str]:
+    from adapters.ollama_adapter import get_available_models
+
+    return [
+        m for m in get_available_models(default_models, settings=base_settings)
+        if "gpt-oss" not in str(m).lower()
+    ]
+
+
+def _preprocess_label(option: str) -> str:
+    if option == PREPROCESS_PROFILE_DEFAULT:
+        return "Profile default"
+    return option
+
+
+def _custom_field_default(profile_id: str) -> str:
+    try:
+        profile_fields = get_profile(profile_id).fields
+    except ValueError:
+        profile_fields = []
+    if profile_fields:
+        return ", ".join(profile_fields)
+    return GENERIC_CUSTOM_FIELDS
 
 
 def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> SidebarState:
@@ -55,38 +109,61 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
             type=["png", "jpg", "jpeg", "pdf"],
         ) or []
 
+        st.subheader("Processing")
+        state.profile_id = st.selectbox(
+            "Profile",
+            PROFILE_OPTIONS,
+            index=PROFILE_OPTIONS.index(state.profile_id),
+            help="Choose built-in extraction defaults for common document types.",
+        )
+        state.ocr_backend = st.selectbox(
+            "Backend mode",
+            BACKEND_OPTIONS,
+            index=BACKEND_OPTIONS.index(state.ocr_backend),
+            help="Choose the OCR engine route. Docling runs without Ollama for text-only OCR.",
+        )
+        preprocess_index = (
+            0
+            if state.preprocess is None
+            else PREPROCESS_OPTIONS.index(state.preprocess)
+        )
+        selected_preprocess = st.selectbox(
+            "Preprocessing",
+            PREPROCESS_OPTIONS,
+            index=preprocess_index,
+            format_func=_preprocess_label,
+            help="Prepare scans before OCR without changing the source file.",
+        )
+        state.preprocess = (
+            None
+            if selected_preprocess == PREPROCESS_PROFILE_DEFAULT
+            else selected_preprocess
+        )
+
         st.subheader("Model")
-        default_models = [
-            "gemma4:latest",
-            "gemma4",
-            "gemma4:e4b",
-            "gemma4:e2b",
-            "gemma4:26b",
-            "gemma4:31b",
-            "gemma3:12b",
-            "llama3.2-vision",
-            "granite3.2-vision",
-            "deepseek-ocr",
-            "MHKetbi/Unsloth_gemma3-12b-it:latest",
-        ]
-        local_models, ollama_available = _load_local_model_inventory(base_settings)
-        model_options = [
-            m for m in get_available_models(default_models, settings=base_settings)
-            if "gpt-oss" not in str(m).lower()
-        ]
+        if state.ocr_backend == "docling":
+            local_models: List[str] = []
+            ollama_available = False
+            model_options = list(DEFAULT_MODELS)
+        else:
+            local_models, ollama_available = _load_local_model_inventory(base_settings)
+            model_options = _available_model_options(DEFAULT_MODELS, base_settings)
         state.selected_model = st.selectbox(
             "Vision model",
             model_options,
             help="Select which AI model to use for image analysis",
         )
-        render_setup_status(
-            build_readiness_items(
-                ollama_available=ollama_available,
-                model_names=local_models,
-                selected_model=state.selected_model,
-                pdf_supported=pdf_supported,
+        if state.ocr_backend == "docling":
+            st.caption("Docling mode skips Ollama model checks.")
+        else:
+            render_setup_status(
+                build_readiness_items(
+                    ollama_available=ollama_available,
+                    model_names=local_models,
+                    selected_model=state.selected_model,
+                    pdf_supported=pdf_supported,
+                )
             )
-        )
 
         with st.expander("Advanced Model Options", expanded=False):
             system_prompt = st.text_area(
@@ -188,7 +265,7 @@ def render_sidebar(base_settings: Settings, *, pdf_supported: bool = True) -> Si
                 else:
                     custom_fields = st.text_area(
                         "Enter fields to extract (comma separated):",
-                        value="Invoice number, Date, Company name, Total amount",
+                        value=_custom_field_default(state.profile_id),
                     )
                     state.fields = [f.strip() for f in custom_fields.split(",") if f.strip()]
 

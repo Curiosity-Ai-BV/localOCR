@@ -151,6 +151,28 @@ def test_list_show_and_chat_use_settings_request_timeout():
     client.chat.assert_called_once()
 
 
+def test_query_ollama_forwards_schema_dict_format():
+    schema = {
+        "type": "object",
+        "properties": {"total": {"type": "string"}},
+        "required": ["total"],
+    }
+    client = Mock()
+    client.chat.return_value = {"message": {"content": '{"total": "42"}'}}
+
+    with patch.object(adapter.ollama, "Client", return_value=client):
+        content = adapter.query_ollama(
+            "prompt",
+            "img",
+            "gemma4:latest",
+            format=schema,
+            timeout=1.0,
+        )
+
+    assert content == '{"total": "42"}'
+    assert client.chat.call_args.kwargs["format"] is schema
+
+
 def test_substring_no_longer_matches():
     """Regression: 'gemma4' should NOT match 'gemma4:26b' without explicit tag."""
     with patch.object(adapter.ollama, "show", side_effect=Exception("no")):
