@@ -312,3 +312,59 @@ def test_empty_ground_truth_values_are_ignored_from_metric_totals(
     assert {row["field"] for row in ignored_rows} == {"date", "total"}
     assert {row["ignore_reason"] for row in ignored_rows} == {"empty_ground_truth"}
     assert all(row["match"] is None for row in ignored_rows)
+
+
+def test_fail_on_errors_returns_nonzero_after_writing_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dataset = _write_dataset(
+        tmp_path,
+        {
+            "invoice.png": {
+                "invoice_number": "INV-42",
+            }
+        },
+    )
+    metrics_path = tmp_path / "metrics.json"
+    details_path = tmp_path / "details.csv"
+    chart_path = tmp_path / "chart.json"
+
+    def fake_run_batch(jobs, cfg):
+        yield Result(
+            source="invoice.png",
+            mode="extract",
+            text="",
+            fields={},
+            error="Ollama chat failed: timed out",
+            engine="ollama",
+            profile_id="generic",
+            preprocess_steps=[],
+        )
+
+    monkeypatch.setattr(evaluate, "is_ollama_running", lambda: True)
+    monkeypatch.setattr(evaluate, "run_batch", fake_run_batch)
+    monkeypatch.setattr(evaluate, "create_chart", _write_chart)
+
+    rc = evaluate.main(
+        [
+            "--dataset",
+            str(dataset),
+            "--model",
+            "fake-model",
+            "--metrics-json",
+            str(metrics_path),
+            "--detailed-csv",
+            str(details_path),
+            "--chart-output",
+            str(chart_path),
+            "--fail-on-errors",
+        ]
+    )
+
+    assert rc == 1
+    assert metrics_path.exists()
+    assert details_path.exists()
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    assert metrics["run"]["error_results"] == 1
+    assert metrics["detailed_rows"][0]["error"] == "Ollama chat failed: timed out"

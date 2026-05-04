@@ -33,6 +33,7 @@ jobs:
   evaluate:
     runs-on: ubuntu-latest
     needs: check
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +48,29 @@ jobs:
           python -m pip install -c constraints.txt -r requirements.txt
           python -m pip install -c constraints.txt -r requirements-dev.txt
 
-      - name: Run deterministic evaluation smoke
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama Server
+        run: |
+          ollama serve > ollama.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat ollama.log
+          exit 1
+
+      - name: Pull Vision Model
+        run: |
+          ollama pull granite3.2-vision
+
+      - name: Run automated evaluation
         env:
+          EVAL_MODEL: granite3.2-vision
           EVAL_MAX_IMAGES: 2
-        run: python evaluate.py --allow-mock
+          LOCALOCR_REQUEST_TIMEOUT: 360
+        run: python evaluate.py --fail-on-errors

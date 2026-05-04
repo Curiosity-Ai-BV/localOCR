@@ -452,6 +452,7 @@ def _build_metrics_payload(
             "max_images": max_images,
             "evaluated_files": len(entries),
             "total_results": len(results),
+            "error_results": sum(1 for result in results if result.error),
             "evidence_path": evidence_path,
         },
         "field_accuracy": {
@@ -541,6 +542,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--allow-mock",
         action="store_true",
         help="Fall back to deterministic mock results if Ollama is not running.",
+    )
+    parser.add_argument(
+        "--fail-on-errors",
+        action="store_true",
+        help="Exit non-zero when any evaluated file returns an OCR error.",
     )
     parser.add_argument(
         "--update-readme",
@@ -662,6 +668,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         update_readme(final_metrics, args.chart_output)
     else:
         print("Skipping README update.")
+
+    error_results = metrics_payload["run"]["error_results"]
+    if args.fail_on_errors and error_results:
+        print(
+            f"Evaluation failed: {error_results} result(s) returned OCR errors.",
+            file=sys.stderr,
+        )
+        return 1
 
     print("Evaluation completed successfully.")
     return 0
