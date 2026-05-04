@@ -1,3 +1,9 @@
+## 2026-05-04
+
+- Changed the GitHub Actions evaluation job to run the deterministic service-free evaluator path instead of installing Ollama, starting a server, pulling a vision model, and risking hosted-runner inference timeouts.
+- Added a CI workflow regression test that keeps the evaluation job on `python evaluate.py --allow-mock` and prevents reintroducing live Ollama install/pull steps.
+- Updated README CI notes to distinguish service-free hosted-runner smoke evaluation from local Ollama-backed evaluation.
+
 ## 2026-05-03
 
 - Tightened the branded app header into a compact logo/title lockup with the description aligned under the title, smaller responsive type, and a measured logo size.

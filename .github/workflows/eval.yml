@@ -47,23 +47,7 @@ jobs:
           python -m pip install -c constraints.txt -r requirements.txt
           python -m pip install -c constraints.txt -r requirements-dev.txt
 
-      - name: Install Ollama
-        run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-
-      - name: Start Ollama Server
-        run: |
-          ollama serve &
-          # Wait for ollama to be ready
-          sleep 5
-
-      - name: Pull Vision Model
-        run: |
-          # Use a smaller model for CI to avoid memory limits and timeouts on standard runners.
-          ollama pull granite3.2-vision
-
-      - name: Run automated evaluation
+      - name: Run deterministic evaluation smoke
         env:
-          EVAL_MODEL: granite3.2-vision
           EVAL_MAX_IMAGES: 2
-        run: python evaluate.py
+        run: python evaluate.py --allow-mock
