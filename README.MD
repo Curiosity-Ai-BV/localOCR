@@ -111,8 +111,9 @@ make check
 `constraints.txt` pins the verified runtime, development, and stable transitive
 dependency set. Python-specific compiled transitive packages are resolved per
 interpreter. CI installs through this file on Python 3.10, 3.11, 3.12, and 3.13
-before running `make check`; the Ollama-backed evaluation runs only once on
-Python 3.11 to keep the workflow practical.
+before running `make check`; the evaluation job runs a deterministic mock smoke
+on Python 3.11 so hosted runners do not depend on downloading or serving local
+vision models.
 
 ### Optional Docling backend
 
@@ -258,7 +259,7 @@ python evaluate.py \
 
 - `--metrics-json`: writes deterministic metrics with run metadata, field counts, aggregate accuracy, backend/profile/preprocess group metrics, detailed rows, and evidence path
 - `--out-evidence`: writes the same evidence JSON shape as the CLI/UI exporter
-- `--allow-mock`: uses deterministic mock `Result` objects when Ollama is unavailable; mock runs never update the README
+- `--allow-mock`: uses deterministic mock `Result` objects when Ollama is unavailable; this keeps CI service-free, and mock runs never update the README
 - `--update-readme`: opt in to refreshing the automated evaluation block below; default evaluation runs do not mutate `README.MD`
 - `--chart-output` and `--detailed-csv`: override the default `eval_results.png` and `eval_detailed_results.csv` artifact paths
 
