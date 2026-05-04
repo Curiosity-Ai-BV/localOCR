@@ -1,8 +1,9 @@
 ## 2026-05-04
 
-- Changed the GitHub Actions evaluation job to run the deterministic service-free evaluator path instead of installing Ollama, starting a server, pulling a vision model, and risking hosted-runner inference timeouts.
-- Added a CI workflow regression test that keeps the evaluation job on `python evaluate.py --allow-mock` and prevents reintroducing live Ollama install/pull steps.
-- Updated README CI notes to distinguish service-free hosted-runner smoke evaluation from local Ollama-backed evaluation.
+- Kept the GitHub Actions evaluation job as a live Ollama-backed gate, with a readiness loop, a longer request timeout, and a job timeout so hosted-runner startup and inference delays are handled explicitly.
+- Added evaluator `--fail-on-errors` so CI exits non-zero when live OCR requests time out or otherwise return per-file errors after artifacts are written.
+- Added CI and evaluator regressions to prevent replacing the live gate with mock mode and to keep timeout/error results from being reported as successful evaluations.
+- Updated README CI notes and evaluator flag documentation for the live Ollama gate.
 
 ## 2026-05-03
 
